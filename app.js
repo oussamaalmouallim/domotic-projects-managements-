@@ -58,6 +58,13 @@ function showView(viewName) {
             calendarEl._calendar.render();
         }
     }
+    
+    // Update project lists when switching to specific views
+    if (viewName === 'report') {
+        updateProjectReportList();
+    } else if (viewName === 'domotique') {
+        updateDomotiqueProjectList();
+    }
 }
 
 // Calendar functions
@@ -295,6 +302,7 @@ function showProjectModal(type, projectId = null) {
             document.getElementById('projectName').value = project.name;
             document.getElementById('projectClient').value = project.clientId;
             document.getElementById('projectStatus').value = project.status;
+            document.getElementById('projectType').value = project.type || 'appartement';
             if (project.startDate) {
                 document.getElementById('projectStartDate').value = formatDateForInput(project.startDate);
             }
@@ -320,6 +328,7 @@ function saveProject() {
     const clientId = Number(document.getElementById('projectClient').value);
     const projectName = document.getElementById('projectName').value;
     const projectStatus = document.getElementById('projectStatus').value;
+    const projectType = document.getElementById('projectType').value;
     const startDate = document.getElementById('projectStartDate').value;
     const endDate = document.getElementById('projectEndDate').value;
     
@@ -335,12 +344,13 @@ function saveProject() {
             project.name = projectName;
             project.clientId = clientId;
             project.status = projectStatus;
+            project.type = projectType;
             project.startDate = startDate ? new Date(startDate) : null;
             project.endDate = endDate ? new Date(endDate) : null;
         }
     } else {
         // Create new project
-        const newProject = new Project(Date.now().toString(), clientId, projectName);
+        const newProject = new Project(Date.now().toString(), clientId, projectName, projectType);
         newProject.status = projectStatus;
         newProject.startDate = startDate ? new Date(startDate) : null;
         newProject.endDate = endDate ? new Date(endDate) : null;
@@ -351,6 +361,7 @@ function saveProject() {
     updateDashboard();
     updateCalendarWithProjects(); // Update calendar with project dates
     updateDomotiqueProjectList(); // Update project list in domotique view
+    updateProjectReportList(); // Update project list in report view
     bootstrap.Modal.getInstance(document.getElementById('projectModal')).hide();
 }
 
@@ -360,6 +371,8 @@ function deleteProject(projectId) {
         updateProjectsList();
         updateDashboard();
         updateCalendarWithProjects(); // Update calendar after deleting project
+        updateDomotiqueProjectList(); // Update project list in domotique view
+        updateProjectReportList(); // Update project list in report view
     }
 }
 
@@ -439,7 +452,7 @@ function renderProjects(projectsList) {
                         <p><strong>Date de fin prévue:</strong> ${endDateDisplay}</p>
                         <p><strong>Équipements requis:</strong></p>
                         <ul>
-                            <li>Relais: ${requirements.relays}</li>
+                            <li>Relais: ${requirements.relais}</li>
                             <li>Variateurs: ${requirements.dimmers}</li>
                             <li>Contrôleurs: ${requirements.controllers}</li>
                         </ul>
@@ -731,26 +744,6 @@ function generateProjectReport() {
             statusText = 'Statut inconnu';
     }
     
-    // Prepare timeline
-    const history = project.history.length ? project.history.slice(-5).reverse() : [];
-    const timelineItems = history.map(item => {
-        const date = new Date(item.date).toLocaleDateString('fr-FR', { 
-            day: '2-digit', 
-            month: '2-digit', 
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-        return `
-            <div class="timeline-item">
-                <div class="timeline-item-content">
-                    <p>${item.action}</p>
-                    <span class="timeline-item-date">${date}</span>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
     // Create device counts for summary
     const deviceTypesTranslation = {
         'ON_OFF': 'Éclairage ON/OFF',
@@ -861,21 +854,6 @@ function generateProjectReport() {
                 ${locationsHtml || '<div class="col-12 text-center">Aucun emplacement configuré</div>'}
             </div>
         </div>
-
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h4>Historique récent</h4>
-                    </div>
-                    <div class="card-body">
-                        <div class="timeline">
-                            ${timelineItems || '<p class="text-center">Aucun historique disponible</p>'}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     `;
 }
 
@@ -935,48 +913,80 @@ function loadProjectLocations() {
 
 function renderLocations() {
     const locationsContainer = document.getElementById('locations-container');
+    const isVilla = currentDomotiqueProject.type === 'villa';
     
-    if (!currentDomotiqueProject || currentDomotiqueProject.locations.length === 0) {
-        locationsContainer.innerHTML = '<p class="text-center">Aucun emplacement configuré pour ce projet</p>';
+    if (!currentDomotiqueProject) {
+        locationsContainer.innerHTML = '<p class="text-center">Aucun projet sélectionné</p>';
         return;
     }
     
-    locationsContainer.innerHTML = currentDomotiqueProject.locations.map((location, index) => {
-        return `
-            <div class="card mb-3 location-card" data-index="${index}">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5>${location.name}</h5>
-                    <div>
-                        <button class="btn btn-sm btn-danger" onclick="removeLocation(${index})">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            ${renderDeviceCheckbox(index, 'ON_OFF', 'Éclairage ON/OFF', location)}
-                            ${renderDeviceCheckbox(index, 'DIMMER', 'Éclairage variation DIM', location)}
-                            ${renderDeviceCheckbox(index, 'SONORISATION', 'Sonorisation', location)}
-                            ${renderDeviceCheckbox(index, 'CLIMATISATION', 'Climatisation', location)}
-                            ${renderDeviceCheckbox(index, 'CHAUFFAGE', 'Chauffage', location)}
-                        </div>
-                        <div class="col-md-6">
-                            ${renderDeviceCheckbox(index, 'CAMERA', 'Caméra', location)}
-                            ${renderDeviceCheckbox(index, 'VOLET', 'Volet roulant', location)}
-                            ${renderDeviceCheckbox(index, 'ECRAN', 'Écran', location)}
-                            ${renderDeviceCheckbox(index, 'VIDEOPHONIE', 'Vidéophonie', location)}
-                            ${renderDeviceCheckbox(index, 'WIFI', 'WiFi', location)}
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <label class="form-label">Notes:</label>
-                        <textarea class="form-control location-notes" data-index="${index}" rows="2">${location.notes}</textarea>
-                    </div>
-                </div>
+    if (currentDomotiqueProject.locations.length === 0) {
+        locationsContainer.innerHTML = `
+            <p class="text-center">Aucun emplacement configuré pour ce projet</p>
+            <div class="text-center mt-3">
+                <button class="btn btn-primary" onclick="addNewLocation()">
+                    <i class="bi bi-plus-circle me-2"></i>Ajouter un emplacement
+                </button>
             </div>
         `;
-    }).join('');
+        return;
+    }
+    
+    if (isVilla) {
+        // Group locations by floor
+        const floorLocations = {
+            'SOUS_SOL': [],
+            'RDC': [],
+            'ETAGE': []
+        };
+        
+        currentDomotiqueProject.locations.forEach((location, index) => {
+            if (location.floor) {
+                floorLocations[location.floor].push({ location, index });
+            } else {
+                // For backward compatibility with old data
+                floorLocations['RDC'].push({ location, index });
+            }
+        });
+        
+        // Render locations by floor
+        locationsContainer.innerHTML = `
+            <div class="accordion" id="floorAccordion">
+                ${Object.entries(floorLocations).map(([floor, locations]) => {
+                    const floorName = getFloorName(floor);
+                    return `
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button ${floor === 'RDC' ? '' : 'collapsed'}" type="button" 
+                                        data-bs-toggle="collapse" data-bs-target="#collapse${floor}">
+                                    ${floorName} (${locations.length} emplacements)
+                                </button>
+                            </h2>
+                            <div id="collapse${floor}" class="accordion-collapse collapse ${floor === 'RDC' ? 'show' : ''}" 
+                                 data-bs-parent="#floorAccordion">
+                                <div class="accordion-body">
+                                    ${locations.length > 0 ? 
+                                        locations.map(({ location, index }) => renderLocationCard(location, index)).join('') : 
+                                        `<p class="text-center">Aucun emplacement sur ${floorName.toLowerCase()}</p>`
+                                    }
+                                    <div class="text-center mt-3">
+                                        <button class="btn btn-primary" onclick="addNewLocation('${floor}')">
+                                            <i class="bi bi-plus-circle me-2"></i>Ajouter un emplacement sur ${floorName.toLowerCase()}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    } else {
+        // Regular rendering for apartments (no floors)
+        locationsContainer.innerHTML = currentDomotiqueProject.locations.map((location, index) => {
+            return renderLocationCard(location, index);
+        }).join('');
+    }
     
     // Add event listeners for notes
     document.querySelectorAll('.location-notes').forEach(textarea => {
@@ -985,6 +995,52 @@ function renderLocations() {
             currentDomotiqueProject.locations[index].notes = this.value;
         });
     });
+}
+
+function getFloorName(floor) {
+    switch(floor) {
+        case 'SOUS_SOL': return 'Sous-sol';
+        case 'RDC': return 'Rez-de-chaussée';
+        case 'ETAGE': return 'Étage';
+        default: return floor;
+    }
+}
+
+function renderLocationCard(location, index) {
+    return `
+        <div class="card mb-3 location-card" data-index="${index}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>${location.name}</h5>
+                <div>
+                    <button class="btn btn-sm btn-danger" onclick="removeLocation(${index})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        ${renderDeviceCheckbox(index, 'ON_OFF', 'Éclairage ON/OFF', location)}
+                        ${renderDeviceCheckbox(index, 'DIMMER', 'Éclairage variation DIM', location)}
+                        ${renderDeviceCheckbox(index, 'SONORISATION', 'Sonorisation', location)}
+                        ${renderDeviceCheckbox(index, 'CLIMATISATION', 'Climatisation', location)}
+                        ${renderDeviceCheckbox(index, 'CHAUFFAGE', 'Chauffage', location)}
+                    </div>
+                    <div class="col-md-6">
+                        ${renderDeviceCheckbox(index, 'CAMERA', 'Caméra', location)}
+                        ${renderDeviceCheckbox(index, 'VOLET', 'Volet roulant', location)}
+                        ${renderDeviceCheckbox(index, 'ECRAN', 'Écran', location)}
+                        ${renderDeviceCheckbox(index, 'VIDEOPHONIE', 'Vidéophonie', location)}
+                        ${renderDeviceCheckbox(index, 'WIFI', 'WiFi', location)}
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label">Notes:</label>
+                    <textarea class="form-control location-notes" data-index="${index}" rows="2">${location.notes || ''}</textarea>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 function renderDeviceCheckbox(locationIndex, deviceType, label, location) {
@@ -1123,18 +1179,177 @@ function showScreenSelectionModal(locationIndex, device) {
     };
 }
 
-function addNewLocation() {
+function addNewLocation(floor = null) {
     if (!currentDomotiqueProject) {
         alert('Veuillez d\'abord sélectionner un projet');
         return;
     }
     
-    const locationName = prompt('Nom de l\'emplacement (ex: Cuisine, Salon, Chambre 1...):');
-    if (locationName) {
+    showLocationSelectionModal(floor);
+}
+
+function showLocationSelectionModal(selectedFloor = null) {
+    const isVilla = currentDomotiqueProject.type === 'villa';
+    
+    // Create modal if it doesn't exist
+    if (!document.getElementById('locationSelectionModal')) {
+        const predefinedLocations = [
+            'Salon',
+            'Salon Europe',
+            'Chambre',
+            'Chambre parentale',
+            'Bibliothèque',
+            'Cinema',
+            'SDB',
+            'Dressing',
+            'Cuisine',
+            'Hall',
+            'Jardin',
+            'Piscine',
+            'Bureau',
+            'Salle de jeux',
+            'Espace de lecture',
+            'Terasse'
+        ];
+        
+        let locationOptionsHtml = '';
+        predefinedLocations.forEach(location => {
+            locationOptionsHtml += `
+                <div class="col-md-6 mb-2">
+                    <div class="form-check">
+                        <input class="form-check-input location-option" type="radio" name="locationOption" id="location-${location}" value="${location}">
+                        <label class="form-check-label" for="location-${location}">
+                            ${location}
+                        </label>
+                    </div>
+                </div>
+            `;
+        });
+        
+        const modalHtml = `
+            <div class="modal fade" id="locationSelectionModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Sélection de l'emplacement</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            ${isVilla ? `
+                            <div id="floor-selection" class="mb-3">
+                                <label class="form-label">Étage:</label>
+                                <select class="form-select" id="floor-select">
+                                    <option value="SOUS_SOL">Sous-sol</option>
+                                    <option value="RDC" selected>Rez-de-chaussée</option>
+                                    <option value="ETAGE">Étage</option>
+                                </select>
+                            </div>
+                            ` : ''}
+                            <p>Veuillez sélectionner un emplacement ou saisir un nouveau :</p>
+                            <div class="row mt-3">
+                                ${locationOptionsHtml}
+                            </div>
+                            <div class="mt-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="locationOption" id="location-other" value="other">
+                                    <label class="form-check-label" for="location-other">
+                                        Autre (préciser)
+                                    </label>
+                                </div>
+                                <div id="custom-location-container" class="mt-2 d-none">
+                                    <input type="text" class="form-control" id="custom-location-name" placeholder="Nom de l'emplacement">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                            <button type="button" class="btn btn-primary" id="confirmLocationSelection">Confirmer</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modalContainer = document.createElement('div');
+        modalContainer.innerHTML = modalHtml;
+        document.body.appendChild(modalContainer);
+        
+        // Add event listener for "other" option to show/hide custom location input
+        document.getElementById('location-other').addEventListener('change', function() {
+            document.getElementById('custom-location-container').classList.remove('d-none');
+        });
+        
+        // Add event listeners for predefined locations to hide custom input
+        document.querySelectorAll('.location-option').forEach(radio => {
+            radio.addEventListener('change', function() {
+                document.getElementById('custom-location-container').classList.add('d-none');
+            });
+        });
+    }
+    
+    // Show the modal
+    const modal = document.getElementById('locationSelectionModal');
+    const locationModal = new bootstrap.Modal(modal);
+    locationModal.show();
+    
+    // Show/hide floor selection based on project type
+    const floorSelection = document.getElementById('floor-selection');
+    if (floorSelection) {
+        if (currentDomotiqueProject.type === 'villa') {
+            floorSelection.classList.remove('d-none');
+            if (selectedFloor) {
+                document.getElementById('floor-select').value = selectedFloor;
+            }
+        } else {
+            floorSelection.classList.add('d-none');
+        }
+    }
+    
+    // Reset form
+    document.querySelectorAll('input[name="locationOption"]').forEach(radio => {
+        radio.checked = false;
+    });
+    document.getElementById('custom-location-container').classList.add('d-none');
+    if (document.getElementById('custom-location-name')) {
+        document.getElementById('custom-location-name').value = '';
+    }
+    
+    // Add event listener for confirmation button
+    document.getElementById('confirmLocationSelection').onclick = function() {
+        const selectedOption = document.querySelector('input[name="locationOption"]:checked');
+        
+        if (!selectedOption) {
+            alert('Veuillez sélectionner un emplacement');
+            return;
+        }
+        
+        let locationName;
+        if (selectedOption.value === 'other') {
+            locationName = document.getElementById('custom-location-name').value.trim();
+            if (!locationName) {
+                alert('Veuillez saisir un nom pour l\'emplacement');
+                return;
+            }
+        } else {
+            locationName = selectedOption.value;
+        }
+        
+        // Create new location and add to project
         const newLocation = new Location(locationName);
+        
+        // Set floor for villa type projects
+        if (currentDomotiqueProject.type === 'villa') {
+            const floorSelect = document.getElementById('floor-select');
+            if (floorSelect) {
+                newLocation.floor = floorSelect.value;
+            }
+        }
+        
         currentDomotiqueProject.addLocation(newLocation);
         renderLocations();
-    }
+        
+        // Hide the modal
+        locationModal.hide();
+    };
 }
 
 function removeLocation(index) {
@@ -1176,6 +1391,11 @@ function generateReportFromDomotique() {
     
     // Switch to report view and select this project
     showView('report');
+    
+    // Ensure project list in report view is updated
+    updateProjectReportList();
+    
+    // Set the project and generate report
     document.getElementById('report-project-select').value = currentDomotiqueProject.id;
     generateProjectReport();
 }
