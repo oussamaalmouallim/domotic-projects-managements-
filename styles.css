@@ -251,6 +251,28 @@
     margin-top: 0.5rem;
 }
 
+/* Villa floor divisions */
+.floor-heading {
+    background-color: #f1f8ff;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+    border-left: 4px solid #0d6efd;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: #e7f1ff;
+    color: #0c63e4;
+}
+
+.accordion-button:focus {
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.floor-container {
+    margin-bottom: 20px;
+}
+
 @media print {
     .sidebar, .btn, .navbar, .no-print {
         display: none !important;
