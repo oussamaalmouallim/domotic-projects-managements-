@@ -1,0 +1,418 @@
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DomoticPro - Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar Navigation -->
+            <div class="col-md-2 sidebar bg-dark text-white py-4 no-print">
+                <h3 class="text-center mb-4">DomoticPro</h3>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link text-white active" href="#" onclick="showView('dashboard')">
+                            <i class="bi bi-speedometer2 me-2"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white" href="#" onclick="showView('clients')">
+                            <i class="bi bi-people-fill me-2"></i> Clients
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white" href="#" onclick="showView('projects')">
+                            <i class="bi bi-hammer me-2"></i> Projets
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white" href="#" onclick="showView('report')">
+                            <i class="bi bi-file-text me-2"></i> Rapports
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white" href="#" onclick="showView('calendar')">
+                            <i class="bi bi-calendar-event me-2"></i> Agenda
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white" href="#" onclick="showView('domotique')">
+                            <i class="bi bi-house-gear me-2"></i> Mise en place domotique
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="col-md-10 main-content p-4">
+                <!-- Dashboard View -->
+                <div id="dashboard-view" class="view-section">
+                    <h1 class="mb-4">Tableau de bord</h1>
+                    <div class="row">
+                        <div class="col-md-4 mb-4">
+                            <div class="card dashboard-card">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="bi bi-people-fill me-2"></i>Clients</h5>
+                                    <p class="card-text display-4" id="client-count">0</p>
+                                    <a href="#" onclick="showView('clients')" class="btn btn-outline-primary">Gérer les clients</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-4">
+                            <div class="card dashboard-card">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="bi bi-hammer me-2"></i>Projets</h5>
+                                    <p class="card-text display-4" id="project-count">0</p>
+                                    <a href="#" onclick="showView('projects')" class="btn btn-outline-primary">Gérer les projets</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-4">
+                            <div class="card dashboard-card">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="bi bi-box-seam me-2"></i>Stocks</h5>
+                                    <p class="card-text display-4" id="stock-count">0</p>
+                                    <a href="#" onclick="showView('stock')" class="btn btn-outline-primary">Gérer les stocks</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    Projets récents
+                                </div>
+                                <div class="card-body">
+                                    <div id="recent-projects">
+                                        <p class="text-muted">Aucun projet récent</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    Stocks à faible niveau
+                                </div>
+                                <div class="card-body">
+                                    <div id="low-stock">
+                                        <p class="text-muted">Aucun stock à faible niveau</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Clients View -->
+                <div id="clients-view" class="view-section d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h1>Gestion des Clients</h1>
+                        <button class="btn btn-primary" onclick="showClientModal('new')">
+                            <i class="bi bi-plus-circle me-2"></i>Nouveau Client
+                        </button>
+                    </div>
+                    <div id="clientsList" class="table-responsive"></div>
+                </div>
+
+                <!-- Projects View -->
+                <div id="projects-view" class="view-section d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h1>Gestion des Projets</h1>
+                        <button class="btn btn-primary" onclick="showProjectModal('new')">
+                            <i class="bi bi-plus-circle me-2"></i>Nouveau Projet
+                        </button>
+                    </div>
+                    <ul class="nav nav-tabs mb-3" id="projectTabs">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-bs-toggle="tab" href="#non-started-projects">Non commencés</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#active-projects">En cours</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#waiting-projects">En attente</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#late-projects">En retard</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#completed-projects">Terminés</a>
+                        </li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="non-started-projects">
+                            <div id="projetsNonCommences" class="row"></div>
+                        </div>
+                        <div class="tab-pane fade" id="active-projects">
+                            <div id="projetsCours" class="row"></div>
+                        </div>
+                        <div class="tab-pane fade" id="waiting-projects">
+                            <div id="projetsAttente" class="row"></div>
+                        </div>
+                        <div class="tab-pane fade" id="late-projects">
+                            <div id="projetsRetard" class="row"></div>
+                        </div>
+                        <div class="tab-pane fade" id="completed-projects">
+                            <div id="projetsTermines" class="row"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project Report View -->
+                <div id="report-view" class="view-section d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h1>Rapports de projets</h1>
+                    </div>
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Sélection du projet</h5>
+                                </div>
+                                <div class="card-body">
+                                    <select id="report-project-select" class="form-select mb-3">
+                                        <option value="">Sélectionner un projet</option>
+                                    </select>
+                                    <button class="btn btn-primary" onclick="generateProjectReport()">
+                                        <i class="bi bi-file-earmark-text me-2"></i>Générer le rapport
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="project-report-container">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Sélectionnez un projet et générez un rapport pour voir les détails
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stock View -->
+                <div id="stock-view" class="view-section d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h1>Gestion des Stocks</h1>
+                        <button class="btn btn-primary" onclick="showStockModal('new')">
+                            <i class="bi bi-plus-circle me-2"></i>Ajouter un Produit
+                        </button>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header">Inventaire</div>
+                                <div class="card-body">
+                                    <div id="stocksList" class="table-responsive"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">Historique des mouvements</div>
+                                <div class="card-body">
+                                    <div id="stockHistory"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Domotique View -->
+                <div id="domotique-view" class="view-section d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h1>Mise en place domotique</h1>
+                        <div>
+                            <button class="btn btn-info me-2" onclick="generateReportFromDomotique()">
+                                <i class="bi bi-file-earmark-text me-1"></i>Rapport Projet
+                            </button>
+                            <button class="btn btn-success me-2" onclick="saveLocationSetup()">
+                                <i class="bi bi-save me-1"></i>Enregistrer
+                            </button>
+                            <button class="btn btn-primary" onclick="addNewLocation()">
+                                <i class="bi bi-plus-circle me-2"></i>Nouvel emplacement
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Sélection du projet</h5>
+                                </div>
+                                <div class="card-body">
+                                    <select id="domotique-project-select" class="form-select mb-3" onchange="loadProjectLocations()">
+                                        <option value="">Sélectionner un projet</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Emplacements</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="alert alert-info">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        Sélectionnez un projet puis ajoutez les emplacements et les équipements souhaités
+                                    </div>
+                                    <div id="locations-container" class="mt-3">
+                                        <!-- Locations will be added here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Calendar View -->
+                <div id="calendar-view" class="view-section d-none">
+                    <h1 class="mb-4">Agenda</h1>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Les dates de début (<span class="badge bg-success">vert</span>) et dates de fin prévues (<span class="badge bg-danger">rouge</span>) des projets sont automatiquement affichées dans l'agenda.
+                    </div>
+                    <div id="calendar"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal fade" id="clientModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Gestion Client</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="clientForm">
+                        <input type="hidden" id="clientId">
+                        <div class="mb-3">
+                            <label class="form-label">Nom</label>
+                            <input type="text" class="form-control" id="clientName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" id="clientEmail" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Téléphone</label>
+                            <input type="tel" class="form-control" id="clientPhone">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Adresse</label>
+                            <textarea class="form-control" id="clientAddress" rows="2"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Priorité</label>
+                            <select class="form-select" id="clientPriority">
+                                <option value="normal">Normal</option>
+                                <option value="moyenne">Moyenne</option>
+                                <option value="haute">Haute</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                    <button type="button" class="btn btn-primary" onclick="saveClient()">Enregistrer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="projectModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Gestion Projet</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="projectForm">
+                        <input type="hidden" id="projectId">
+                        <div class="mb-3">
+                            <label class="form-label">Nom du projet</label>
+                            <input type="text" class="form-control" id="projectName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Client</label>
+                            <select class="form-select" id="projectClient" required>
+                                <option value="">Sélectionner un client</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Statut</label>
+                            <select class="form-select" id="projectStatus">
+                                <option value="non_commence">Non commencé</option>
+                                <option value="en_cours">En cours</option>
+                                <option value="en_attente">En attente</option>
+                                <option value="en_retard">En retard</option>
+                                <option value="termine">Terminé</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Date de début</label>
+                            <input type="date" class="form-control" id="projectStartDate">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Date de fin prévue</label>
+                            <input type="date" class="form-control" id="projectEndDate">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                    <button type="button" class="btn btn-primary" onclick="saveProject()">Enregistrer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="stockModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Gestion Stock</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="stockForm">
+                        <div class="mb-3">
+                            <label class="form-label">Produit</label>
+                            <input type="text" class="form-control" id="stockItemId" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Quantité</label>
+                            <input type="number" class="form-control" id="stockQuantity" required min="1">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Stock minimum</label>
+                            <input type="number" class="form-control" id="stockMinQuantity" value="5">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                    <button type="button" class="btn btn-primary" onclick="saveStock()">Enregistrer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
+    <script src="stock.js"></script>
+    <script src="project.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
