@@ -1,0 +1,1181 @@
+// Global variables
+let clients = [];
+let projects = [];
+const stockManager = new StockManager();
+let currentDomotiqueProject = null;
+let currentProjectReport = null;
+
+// Initialize application
+document.addEventListener('DOMContentLoaded', function() {
+    initializeCalendar();
+    updateClientsList();
+    updateProjectsList();
+    updateDashboard();
+    
+    // Default view
+    showView('dashboard');
+    
+    // Add Domotique link to sidebar
+    const domotiqueLinkExists = document.querySelector('.sidebar .nav-link[onclick="showView(\'domotique\')"]');
+    if (!domotiqueLinkExists) {
+        const calendarNavItem = document.querySelector('.sidebar .nav-link[onclick="showView(\'calendar\')"]').parentNode;
+        const domotiqueNavItem = document.createElement('li');
+        domotiqueNavItem.className = 'nav-item';
+        domotiqueNavItem.innerHTML = `
+            <a class="nav-link text-white" href="#" onclick="showView('domotique')">
+                <i class="bi bi-house-gear me-2"></i> Domotique
+            </a>
+        `;
+        calendarNavItem.parentNode.insertBefore(domotiqueNavItem, calendarNavItem);
+    }
+    
+    updateDomotiqueProjectList();
+    updateProjectReportList();
+}); 
+
+// Navigation
+function showView(viewName) {
+    // Hide all views
+    document.querySelectorAll('.view-section').forEach(el => {
+        el.classList.add('d-none');
+    });
+    
+    // Remove active class from all nav links
+    document.querySelectorAll('.sidebar .nav-link').forEach(el => {
+        el.classList.remove('active');
+    });
+    
+    // Show selected view
+    document.getElementById(`${viewName}-view`).classList.remove('d-none');
+    
+    // Add active class to current nav link
+    document.querySelector(`.sidebar .nav-link[onclick="showView('${viewName}')"]`).classList.add('active');
+    
+    // Special handling for calendar view
+    if (viewName === 'calendar') {
+        const calendarEl = document.getElementById('calendar');
+        if (calendarEl._calendar) {
+            calendarEl._calendar.render();
+        }
+    }
+}
+
+// Calendar functions
+function initializeCalendar() {
+    const calendarEl = document.getElementById('calendar');
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        locale: 'fr',
+        editable: true,
+        selectable: true,
+        select: function(info) {
+            const title = prompt('Titre de l\'événement:');
+            if (title) {
+                calendar.addEvent({
+                    title: title,
+                    start: info.start,
+                    end: info.end,
+                    allDay: info.allDay
+                });
+            }
+        },
+        eventClick: function(info) {
+            // Allow editing events
+            if (confirm('Voulez-vous modifier cet événement?')) {
+                const newTitle = prompt('Nouveau titre:', info.event.title);
+                if (newTitle) {
+                    info.event.setProp('title', newTitle);
+                }
+            }
+        }
+    });
+    
+    calendar.render();
+    calendarEl._calendar = calendar; // Store reference for later
+    
+    // Add project dates to calendar
+    updateCalendarWithProjects(calendar);
+}
+
+// Function to update calendar with project dates
+function updateCalendarWithProjects(calendar) {
+    if (!calendar) {
+        const calendarEl = document.getElementById('calendar');
+        calendar = calendarEl._calendar;
+    }
+    
+    // Clear existing project events
+    calendar.getEvents().forEach(event => {
+        if (event.extendedProps.isProject) {
+            event.remove();
+        }
+    });
+    
+    // Add project dates to calendar
+    projects.forEach(project => {
+        if (project.startDate || project.endDate) {
+            const client = clients.find(c => c.id === project.clientId);
+            const clientName = client ? client.name : 'Client inconnu';
+            
+            // Add start date event
+            if (project.startDate) {
+                calendar.addEvent({
+                    title: `Début: ${project.name} (${clientName})`,
+                    start: new Date(project.startDate),
+                    allDay: true,
+                    backgroundColor: '#28a745',
+                    borderColor: '#28a745',
+                    extendedProps: {
+                        isProject: true,
+                        projectId: project.id,
+                        type: 'start'
+                    }
+                });
+            }
+            
+            // Add end date event
+            if (project.endDate) {
+                calendar.addEvent({
+                    title: `Fin prévue: ${project.name} (${clientName})`,
+                    start: new Date(project.endDate),
+                    allDay: true,
+                    backgroundColor: '#dc3545',
+                    borderColor: '#dc3545',
+                    extendedProps: {
+                        isProject: true,
+                        projectId: project.id,
+                        type: 'end'
+                    }
+                });
+            }
+        }
+    });
+}
+
+// Client management
+function showClientModal(type, clientId = null) {
+    const modal = new bootstrap.Modal(document.getElementById('clientModal'));
+    document.getElementById('clientForm').reset();
+    
+    if (type === 'edit' && clientId) {
+        const numericId = Number(clientId);
+        const client = clients.find(c => c.id === numericId);
+        if (client) {
+            document.getElementById('clientId').value = client.id;
+            document.getElementById('clientName').value = client.name;
+            document.getElementById('clientEmail').value = client.email;
+            document.getElementById('clientPhone').value = client.phone;
+            document.getElementById('clientAddress').value = client.address || '';
+            document.getElementById('clientPriority').value = client.priority || 'normal';
+        }
+    } else {
+        document.getElementById('clientId').value = '';
+    }
+    
+    modal.show();
+}
+
+function saveClient() {
+    const clientId = document.getElementById('clientId').value;
+    const clientData = {
+        id: clientId ? Number(clientId) : Date.now(),
+        name: document.getElementById('clientName').value,
+        email: document.getElementById('clientEmail').value,
+        phone: document.getElementById('clientPhone').value,
+        address: document.getElementById('clientAddress').value,
+        priority: document.getElementById('clientPriority').value
+    };
+
+    const existingIndex = clients.findIndex(c => c.id === clientData.id);
+    if (existingIndex >= 0) {
+        clients[existingIndex] = clientData;
+    } else {
+        clients.push(clientData);
+    }
+
+    updateClientsList();
+    updateDashboard();
+    bootstrap.Modal.getInstance(document.getElementById('clientModal')).hide();
+}
+
+function deleteClient(clientId) {
+    if (confirm('Êtes-vous sûr de vouloir supprimer ce client ?')) {
+        const numericId = Number(clientId);
+        clients = clients.filter(c => c.id !== numericId);
+        updateClientsList();
+        updateDashboard();
+    }
+}
+
+function updateClientsList() {
+    const clientsList = document.getElementById('clientsList');
+    clientsList.innerHTML = `
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Nom</th>
+                    <th>Email</th>
+                    <th>Téléphone</th>
+                    <th>Adresse</th>
+                    <th>Priorité</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${clients.length === 0 ? 
+                    `<tr><td colspan="7" class="text-center">Aucun client enregistré</td></tr>` : 
+                    clients.map((client, index) => {
+                        const priorityBadge = getPriorityBadge(client.priority);
+                        return `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>${client.name}</td>
+                                <td>${client.email}</td>
+                                <td>${client.phone}</td>
+                                <td>${client.address || '-'}</td>
+                                <td>${priorityBadge}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-warning" onclick="showClientModal('edit', ${client.id})">
+                                        <i class="bi bi-pencil me-1"></i> Modifier
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteClient(${client.id})">
+                                        <i class="bi bi-trash me-1"></i> Supprimer
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')
+                }
+            </tbody>
+        </table>
+    `;
+    
+    // Update project client select options
+    const clientSelect = document.getElementById('projectClient');
+    if (clientSelect) {
+        const currentValue = clientSelect.value;
+        clientSelect.innerHTML = `
+            <option value="">Sélectionner un client</option>
+            ${clients.map(client => `
+                <option value="${client.id}" ${currentValue == client.id ? 'selected' : ''}>
+                    ${client.name}
+                </option>
+            `).join('')}
+        `;
+    }
+}
+
+function getPriorityBadge(priority) {
+    switch(priority) {
+        case 'haute':
+            return '<span class="badge bg-danger">Haute</span>';
+        case 'moyenne':
+            return '<span class="badge bg-warning text-dark">Moyenne</span>';
+        case 'normal':
+        default:
+            return '<span class="badge bg-success">Normal</span>';
+    }
+}
+
+// Project management
+function showProjectModal(type, projectId = null) {
+    const modal = new bootstrap.Modal(document.getElementById('projectModal'));
+    document.getElementById('projectForm').reset();
+    
+    if (type === 'edit' && projectId) {
+        const project = projects.find(p => p.id === projectId);
+        if (project) {
+            document.getElementById('projectId').value = project.id;
+            document.getElementById('projectName').value = project.name;
+            document.getElementById('projectClient').value = project.clientId;
+            document.getElementById('projectStatus').value = project.status;
+            if (project.startDate) {
+                document.getElementById('projectStartDate').value = formatDateForInput(project.startDate);
+            }
+            if (project.endDate) {
+                document.getElementById('projectEndDate').value = formatDateForInput(project.endDate);
+            }
+        }
+    } else {
+        document.getElementById('projectId').value = '';
+    }
+    
+    modal.show();
+}
+
+function formatDateForInput(dateObj) {
+    if (!dateObj) return '';
+    const date = new Date(dateObj);
+    return date.toISOString().split('T')[0];
+}
+
+function saveProject() {
+    const projectId = document.getElementById('projectId').value;
+    const clientId = Number(document.getElementById('projectClient').value);
+    const projectName = document.getElementById('projectName').value;
+    const projectStatus = document.getElementById('projectStatus').value;
+    const startDate = document.getElementById('projectStartDate').value;
+    const endDate = document.getElementById('projectEndDate').value;
+    
+    if (!projectName || !clientId) {
+        alert('Veuillez remplir tous les champs requis');
+        return;
+    }
+    
+    if (projectId) {
+        // Update existing project
+        const project = projects.find(p => p.id === projectId);
+        if (project) {
+            project.name = projectName;
+            project.clientId = clientId;
+            project.status = projectStatus;
+            project.startDate = startDate ? new Date(startDate) : null;
+            project.endDate = endDate ? new Date(endDate) : null;
+        }
+    } else {
+        // Create new project
+        const newProject = new Project(Date.now().toString(), clientId, projectName);
+        newProject.status = projectStatus;
+        newProject.startDate = startDate ? new Date(startDate) : null;
+        newProject.endDate = endDate ? new Date(endDate) : null;
+        projects.push(newProject);
+    }
+    
+    updateProjectsList();
+    updateDashboard();
+    updateCalendarWithProjects(); // Update calendar with project dates
+    updateDomotiqueProjectList(); // Update project list in domotique view
+    bootstrap.Modal.getInstance(document.getElementById('projectModal')).hide();
+}
+
+function deleteProject(projectId) {
+    if (confirm('Êtes-vous sûr de vouloir supprimer ce projet ?')) {
+        projects = projects.filter(p => p.id !== projectId);
+        updateProjectsList();
+        updateDashboard();
+        updateCalendarWithProjects(); // Update calendar after deleting project
+    }
+}
+
+function updateProjectsList() {
+    const nonCommencesProjects = projects.filter(p => p.status === 'non_commence');
+    const currentProjects = projects.filter(p => p.status === 'en_cours');
+    const waitingProjects = projects.filter(p => p.status === 'en_attente');
+    const lateProjects = projects.filter(p => p.status === 'en_retard');
+    const completedProjects = projects.filter(p => p.status === 'termine');
+    
+    document.getElementById('projetsNonCommences').innerHTML = renderProjects(nonCommencesProjects);
+    document.getElementById('projetsCours').innerHTML = renderProjects(currentProjects);
+    document.getElementById('projetsAttente').innerHTML = renderProjects(waitingProjects);
+    document.getElementById('projetsRetard').innerHTML = renderProjects(lateProjects);
+    document.getElementById('projetsTermines').innerHTML = renderProjects(completedProjects);
+}
+
+function renderProjects(projectsList) {
+    if (projectsList.length === 0) {
+        return '<div class="col-12 text-center py-4">Aucun projet dans cette catégorie</div>';
+    }
+    
+    return projectsList.map(project => {
+        const client = clients.find(c => c.id === project.clientId);
+        const clientName = client ? client.name : 'Client inconnu';
+        const requirements = project.calculateRequirements();
+        
+        let statusClass, statusText;
+        switch(project.status) {
+            case 'non_commence':
+                statusClass = 'bg-secondary';
+                statusText = 'Non commencé';
+                break;
+            case 'en_cours':
+                statusClass = 'bg-primary';
+                statusText = 'En cours';
+                break;
+            case 'en_attente':
+                statusClass = 'bg-warning text-dark';
+                statusText = 'En attente';
+                break;
+            case 'en_retard':
+                statusClass = 'bg-danger';
+                statusText = 'En retard';
+                break;
+            case 'termine':
+                statusClass = 'bg-success';
+                statusText = 'Terminé';
+                break;
+            default:
+                statusClass = 'bg-secondary';
+                statusText = 'Statut inconnu';
+        }
+        
+        // Format dates for display
+        const startDateDisplay = project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Non définie';
+        const endDateDisplay = project.endDate ? new Date(project.endDate).toLocaleDateString() : 'Non définie';
+        
+        return `
+            <div class="col-md-6 mb-4">
+                <div class="card project-item">
+                    <div class="card-header d-flex justify-content-between">
+                        <h5>${project.name}</h5>
+                        <div>
+                            <button class="btn btn-sm btn-warning" onclick="showProjectModal('edit', '${project.id}')">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteProject('${project.id}')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Client:</strong> ${clientName}</p>
+                        <p><strong>Statut:</strong> <span class="badge ${statusClass}">${statusText}</span></p>
+                        <p><strong>Date de début:</strong> ${startDateDisplay}</p>
+                        <p><strong>Date de fin prévue:</strong> ${endDateDisplay}</p>
+                        <p><strong>Équipements requis:</strong></p>
+                        <ul>
+                            <li>Relais: ${requirements.relays}</li>
+                            <li>Variateurs: ${requirements.dimmers}</li>
+                            <li>Contrôleurs: ${requirements.controllers}</li>
+                        </ul>
+                        <p><strong>Emplacements:</strong> ${project.locations.length}</p>
+                        <button class="btn btn-outline-primary btn-sm">
+                            Voir les détails
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Stock management
+function showStockModal(type, itemId = null) {
+    const modal = new bootstrap.Modal(document.getElementById('stockModal'));
+    document.getElementById('stockForm').reset();
+    
+    if (type === 'edit' && itemId) {
+        document.getElementById('stockItemId').value = itemId;
+        document.getElementById('stockItemId').readOnly = true;
+        document.getElementById('stockQuantity').value = stockManager.getStock(itemId);
+        document.getElementById('stockMinQuantity').value = stockManager.minStock.get(itemId) || 5;
+    } else {
+        document.getElementById('stockItemId').readOnly = false;
+    }
+    
+    modal.show();
+}
+
+function saveStock() {
+    const itemId = document.getElementById('stockItemId').value;
+    const quantity = parseInt(document.getElementById('stockQuantity').value, 10);
+    const minQuantity = parseInt(document.getElementById('stockMinQuantity').value, 10);
+    
+    if (!itemId || isNaN(quantity) || quantity < 0) {
+        alert('Veuillez remplir tous les champs correctement');
+        return;
+    }
+    
+    stockManager.addItem(itemId, quantity, minQuantity);
+    updateStockList();
+    updateDashboard();
+    bootstrap.Modal.getInstance(document.getElementById('stockModal')).hide();
+}
+
+function removeStock(itemId) {
+    const quantity = parseInt(prompt(`Quantité à retirer pour ${itemId}:`, "1"), 10);
+    if (!isNaN(quantity) && quantity > 0) {
+        if (stockManager.removeItem(itemId, quantity)) {
+            updateStockList();
+            updateDashboard();
+        } else {
+            alert('Stock insuffisant');
+        }
+    }
+}
+
+function updateStockList() {
+    const stocksList = document.getElementById('stocksList');
+    const items = Array.from(stockManager.inventory.keys());
+    
+    if (items.length === 0) {
+        stocksList.innerHTML = '<p class="text-center">Aucun produit en stock</p>';
+        return;
+    }
+    
+    stocksList.innerHTML = `
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Produit</th>
+                    <th>Quantité</th>
+                    <th>Stock Min</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${items.map(itemId => {
+                    const quantity = stockManager.getStock(itemId);
+                    const minQuantity = stockManager.minStock.get(itemId) || 0;
+                    const status = quantity <= minQuantity ? 
+                        '<span class="badge bg-danger">Faible</span>' : 
+                        '<span class="badge bg-success">OK</span>';
+                    
+                    return `
+                        <tr>
+                            <td>${itemId}</td>
+                            <td>${quantity}</td>
+                            <td>${minQuantity}</td>
+                            <td>${status}</td>
+                            <td>
+                                <button class="btn btn-sm btn-warning me-1" onclick="showStockModal('edit', '${itemId}')">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger me-1" onclick="removeStock('${itemId}')">
+                                    <i class="bi bi-dash-circle"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+    
+    // Update stock history
+    const stockHistory = document.getElementById('stockHistory');
+    const history = stockManager.getHistory().slice(-10).reverse(); // Get last 10 entries
+    
+    if (history.length === 0) {
+        stockHistory.innerHTML = '<p class="text-center">Aucun historique</p>';
+        return;
+    }
+    
+    stockHistory.innerHTML = `
+        <div class="list-group">
+            ${history.map(entry => {
+                const date = new Date(entry.date).toLocaleString();
+                const action = entry.action === 'add' ? 'Ajout' : 'Retrait';
+                const badgeClass = entry.action === 'add' ? 'bg-success' : 'bg-danger';
+                
+                return `
+                    <div class="list-group-item list-group-item-action">
+                        <div class="d-flex justify-content-between">
+                            <span class="badge ${badgeClass}">${action}</span>
+                            <small>${date}</small>
+                        </div>
+                        <p class="mb-1">${entry.itemId}: ${entry.quantity}</p>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+// Dashboard updates
+function updateDashboard() {
+    // Update counts
+    document.getElementById('client-count').textContent = clients.length;
+    document.getElementById('project-count').textContent = projects.length;
+    document.getElementById('stock-count').textContent = stockManager.inventory.size;
+    
+    // Update recent projects
+    const recentProjects = projects.slice(0, 3);
+    const recentProjectsEl = document.getElementById('recent-projects');
+    
+    if (recentProjects.length === 0) {
+        recentProjectsEl.innerHTML = '<p class="text-muted">Aucun projet récent</p>';
+    } else {
+        recentProjectsEl.innerHTML = `
+            <div class="list-group">
+                ${recentProjects.map(project => {
+                    const client = clients.find(c => c.id === project.clientId);
+                    const clientName = client ? client.name : 'Client inconnu';
+                    
+                    let statusClass, statusText;
+                    switch(project.status) {
+                        case 'non_commence':
+                            statusClass = 'bg-secondary';
+                            statusText = 'Non commencé';
+                            break;
+                        case 'en_cours':
+                            statusClass = 'bg-primary';
+                            statusText = 'En cours';
+                            break;
+                        case 'en_attente':
+                            statusClass = 'bg-warning text-dark';
+                            statusText = 'En attente';
+                            break;
+                        case 'en_retard':
+                            statusClass = 'bg-danger';
+                            statusText = 'En retard';
+                            break;
+                        case 'termine':
+                            statusClass = 'bg-success';
+                            statusText = 'Terminé';
+                            break;
+                        default:
+                            statusClass = 'bg-secondary';
+                            statusText = 'Statut inconnu';
+                    }
+                    
+                    return `
+                        <div class="list-group-item list-group-item-action">
+                            <div class="d-flex justify-content-between">
+                                <h6>${project.name}</h6>
+                                <span class="badge ${statusClass}">${statusText}</span>
+                            </div>
+                            <p class="mb-1">Client: ${clientName}</p>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+    
+    // Update low stock
+    const lowStockItems = stockManager.checkLowStock();
+    const lowStockEl = document.getElementById('low-stock');
+    
+    if (lowStockItems.length === 0) {
+        lowStockEl.innerHTML = '<p class="text-muted">Aucun stock à faible niveau</p>';
+    } else {
+        lowStockEl.innerHTML = `
+            <div class="list-group">
+                ${lowStockItems.map(item => `
+                    <div class="list-group-item list-group-item-action">
+                        <div class="d-flex justify-content-between">
+                            <h6>${item.itemId}</h6>
+                            <span class="badge bg-danger">Faible</span>
+                        </div>
+                        <p class="mb-1">Quantité: ${item.quantity} / Min: ${item.minQuantity}</p>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+}
+
+// Project Report functions
+function updateProjectReportList() {
+    const projectSelect = document.getElementById('report-project-select');
+    if (projectSelect) {
+        const currentValue = projectSelect.value;
+        projectSelect.innerHTML = `
+            <option value="">Sélectionner un projet</option>
+            ${projects.map(project => {
+                const client = clients.find(c => c.id === project.clientId);
+                const clientName = client ? client.name : 'Client inconnu';
+                return `
+                    <option value="${project.id}" ${currentValue === project.id ? 'selected' : ''}>
+                        ${project.name} (${clientName})
+                    </option>
+                `;
+            }).join('')}
+        `;
+    }
+}
+
+function generateProjectReport() {
+    const projectId = document.getElementById('report-project-select').value;
+    const reportContainer = document.getElementById('project-report-container');
+    
+    if (!projectId) {
+        reportContainer.innerHTML = '<div class="alert alert-warning">Veuillez sélectionner un projet</div>';
+        currentProjectReport = null;
+        return;
+    }
+    
+    const project = projects.find(p => p.id === projectId);
+    
+    if (!project) {
+        reportContainer.innerHTML = '<div class="alert alert-danger">Projet non trouvé</div>';
+        return;
+    }
+    
+    currentProjectReport = new ProjectReport(project);
+    const reportData = currentProjectReport.generateSummary();
+    const clientInfo = currentProjectReport.getClientInfo();
+    
+    // Get status info
+    let statusClass, statusText;
+    switch(project.status) {
+        case 'non_commence':
+            statusClass = 'bg-secondary';
+            statusText = 'Non commencé';
+            break;
+        case 'en_cours':
+            statusClass = 'bg-primary';
+            statusText = 'En cours';
+            break;
+        case 'en_attente':
+            statusClass = 'bg-warning text-dark';
+            statusText = 'En attente';
+            break;
+        case 'en_retard':
+            statusClass = 'bg-danger';
+            statusText = 'En retard';
+            break;
+        case 'termine':
+            statusClass = 'bg-success';
+            statusText = 'Terminé';
+            break;
+        default:
+            statusClass = 'bg-secondary';
+            statusText = 'Statut inconnu';
+    }
+    
+    // Prepare timeline
+    const history = project.history.length ? project.history.slice(-5).reverse() : [];
+    const timelineItems = history.map(item => {
+        const date = new Date(item.date).toLocaleDateString('fr-FR', { 
+            day: '2-digit', 
+            month: '2-digit', 
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        return `
+            <div class="timeline-item">
+                <div class="timeline-item-content">
+                    <p>${item.action}</p>
+                    <span class="timeline-item-date">${date}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Create device counts for summary
+    const deviceTypesTranslation = {
+        'ON_OFF': 'Éclairage ON/OFF',
+        'DIMMER': 'Éclairage variation DIM',
+        'SONORISATION': 'Sonorisation',
+        'CLIMATISATION': 'Climatisation',
+        'CHAUFFAGE': 'Chauffage',
+        'CAMERA': 'Caméra',
+        'VOLET': 'Volet roulant',
+        'ECRAN': 'Écran',
+        'VIDEOPHONIE': 'Vidéophonie',
+        'WIFI': 'WiFi'
+    };
+    
+    const deviceCountsHtml = Object.entries(reportData.deviceCounts)
+        .filter(([_, count]) => count > 0)
+        .map(([type, count]) => `
+            <div class="col-md-4 col-sm-6 mb-3">
+                <div class="card border-light h-100">
+                    <div class="card-body text-center">
+                        <h5 class="device-count">${count}</h5>
+                        <p class="text-muted">${deviceTypesTranslation[type] || type}</p>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    
+    // Create locations detailed summary
+    const locationsHtml = reportData.locationSummary.map(location => {
+        const devicesList = Object.entries(location.devicesByType).map(([type, devices]) => {
+            return devices.map(device => {
+                let deviceDetails = deviceTypesTranslation[type] || type;
+                
+                // Special handling for screens with specifications
+                if (type === 'ECRAN' && device.specifications && device.specifications.screenType) {
+                    deviceDetails += ` (${device.specifications.screenType})`;
+                }
+                
+                return `<li>${deviceDetails}</li>`;
+            }).join('');
+        }).join('');
+        
+        return `
+            <div class="col-md-6 mb-4">
+                <div class="card location-summary-card">
+                    <div class="card-header">
+                        <h5>${location.name}</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Nombre d'équipements:</strong> ${location.deviceCount}</p>
+                        <p><strong>Équipements:</strong></p>
+                        <ul>
+                            ${devicesList || '<li>Aucun équipement</li>'}
+                        </ul>
+                        ${location.notes ? `<p><strong>Notes:</strong> ${location.notes}</p>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Format dates for display
+    const startDateDisplay = project.startDate ? new Date(project.startDate).toLocaleDateString('fr-FR') : 'Non définie';
+    const endDateDisplay = project.endDate ? new Date(project.endDate).toLocaleDateString('fr-FR') : 'Non définie';
+    
+    // Render complete report
+    reportContainer.innerHTML = `
+        <div class="report-header mb-4">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h2>${project.name}</h2>
+                    <p class="text-muted">Client: ${clientInfo.name}</p>
+                    <p>
+                        <span class="badge ${statusClass}">${statusText}</span>
+                        <span class="ms-3"><i class="bi bi-calendar-event"></i> Début: ${startDateDisplay}</span>
+                        <span class="ms-3"><i class="bi bi-calendar-check"></i> Fin prévue: ${endDateDisplay}</span>
+                    </p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-outline-primary" onclick="printReport()">
+                        <i class="bi bi-printer"></i> Imprimer
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="exportReportPDF()">
+                        <i class="bi bi-file-earmark-pdf"></i> Exporter PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Résumé des équipements</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            ${deviceCountsHtml || '<div class="col-12 text-center">Aucun équipement configuré</div>'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <h4>Détails par emplacement</h4>
+            <div class="row">
+                ${locationsHtml || '<div class="col-12 text-center">Aucun emplacement configuré</div>'}
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Historique récent</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="timeline">
+                            ${timelineItems || '<p class="text-center">Aucun historique disponible</p>'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function printReport() {
+    if (!currentProjectReport) {
+        alert('Veuillez d\'abord générer un rapport');
+        return;
+    }
+    
+    window.print();
+}
+
+function exportReportPDF() {
+    // In a real app, this would connect to a PDF generation library
+    alert('Fonctionnalité d\'export PDF à implémenter');
+}
+
+// Domotique functions
+function updateDomotiqueProjectList() {
+    const projectSelect = document.getElementById('domotique-project-select');
+    if (projectSelect) {
+        const currentValue = projectSelect.value;
+        projectSelect.innerHTML = `
+            <option value="">Sélectionner un projet</option>
+            ${projects.map(project => {
+                const client = clients.find(c => c.id === project.clientId);
+                const clientName = client ? client.name : 'Client inconnu';
+                return `
+                    <option value="${project.id}" ${currentValue === project.id ? 'selected' : ''}>
+                        ${project.name} (${clientName})
+                    </option>
+                `;
+            }).join('')}
+        `;
+    }
+}
+
+function loadProjectLocations() {
+    const projectId = document.getElementById('domotique-project-select').value;
+    const locationsContainer = document.getElementById('locations-container');
+    
+    if (!projectId) {
+        locationsContainer.innerHTML = '<p class="text-center">Veuillez sélectionner un projet</p>';
+        currentDomotiqueProject = null;
+        return;
+    }
+    
+    currentDomotiqueProject = projects.find(p => p.id === projectId);
+    
+    if (!currentDomotiqueProject) {
+        locationsContainer.innerHTML = '<p class="text-center">Projet non trouvé</p>';
+        return;
+    }
+    
+    renderLocations();
+}
+
+function renderLocations() {
+    const locationsContainer = document.getElementById('locations-container');
+    
+    if (!currentDomotiqueProject || currentDomotiqueProject.locations.length === 0) {
+        locationsContainer.innerHTML = '<p class="text-center">Aucun emplacement configuré pour ce projet</p>';
+        return;
+    }
+    
+    locationsContainer.innerHTML = currentDomotiqueProject.locations.map((location, index) => {
+        return `
+            <div class="card mb-3 location-card" data-index="${index}">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5>${location.name}</h5>
+                    <div>
+                        <button class="btn btn-sm btn-danger" onclick="removeLocation(${index})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            ${renderDeviceCheckbox(index, 'ON_OFF', 'Éclairage ON/OFF', location)}
+                            ${renderDeviceCheckbox(index, 'DIMMER', 'Éclairage variation DIM', location)}
+                            ${renderDeviceCheckbox(index, 'SONORISATION', 'Sonorisation', location)}
+                            ${renderDeviceCheckbox(index, 'CLIMATISATION', 'Climatisation', location)}
+                            ${renderDeviceCheckbox(index, 'CHAUFFAGE', 'Chauffage', location)}
+                        </div>
+                        <div class="col-md-6">
+                            ${renderDeviceCheckbox(index, 'CAMERA', 'Caméra', location)}
+                            ${renderDeviceCheckbox(index, 'VOLET', 'Volet roulant', location)}
+                            ${renderDeviceCheckbox(index, 'ECRAN', 'Écran', location)}
+                            ${renderDeviceCheckbox(index, 'VIDEOPHONIE', 'Vidéophonie', location)}
+                            ${renderDeviceCheckbox(index, 'WIFI', 'WiFi', location)}
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label class="form-label">Notes:</label>
+                        <textarea class="form-control location-notes" data-index="${index}" rows="2">${location.notes}</textarea>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Add event listeners for notes
+    document.querySelectorAll('.location-notes').forEach(textarea => {
+        textarea.addEventListener('change', function() {
+            const index = this.getAttribute('data-index');
+            currentDomotiqueProject.locations[index].notes = this.value;
+        });
+    });
+}
+
+function renderDeviceCheckbox(locationIndex, deviceType, label, location) {
+    const device = location.devices.find(d => d.type === deviceType);
+    const isChecked = device !== undefined;
+    
+    let additionalInfo = '';
+    if (isChecked && deviceType === 'ECRAN' && device.specifications.screenType) {
+        additionalInfo = ` <span class="badge bg-info">${device.specifications.screenType}</span>`;
+    }
+    
+    return `
+        <div class="form-check mb-2">
+            <input class="form-check-input device-checkbox" type="checkbox" 
+                   id="device-${locationIndex}-${deviceType}" 
+                   data-location="${locationIndex}" 
+                   data-type="${deviceType}" 
+                   ${isChecked ? 'checked' : ''} 
+                   onchange="toggleDevice(${locationIndex}, '${deviceType}', this.checked)">
+            <label class="form-check-label" for="device-${locationIndex}-${deviceType}">
+                ${label}${additionalInfo}
+            </label>
+        </div>
+    `;
+}
+
+function toggleDevice(locationIndex, deviceType, isChecked) {
+    if (!currentDomotiqueProject) return;
+    
+    const location = currentDomotiqueProject.locations[locationIndex];
+    
+    if (isChecked) {
+        // Add device if it doesn't exist
+        if (!location.devices.some(d => d.type === deviceType)) {
+            const newDevice = new Device(deviceType, getDeviceName(deviceType));
+            
+            // For ECRAN devices, show the screen selection modal
+            if (deviceType === 'ECRAN') {
+                showScreenSelectionModal(locationIndex, newDevice);
+            } else {
+                location.addDevice(newDevice);
+            }
+        }
+    } else {
+        // Remove device if it exists
+        location.devices = location.devices.filter(d => d.type !== deviceType);
+    }
+}
+
+function getDeviceName(deviceType) {
+    const names = {
+        'ON_OFF': 'Éclairage ON/OFF',
+        'DIMMER': 'Éclairage variation DIM',
+        'SONORISATION': 'Sonorisation',
+        'CLIMATISATION': 'Climatisation',
+        'CHAUFFAGE': 'Chauffage',
+        'CAMERA': 'Caméra',
+        'VOLET': 'Volet roulant',
+        'ECRAN': 'Écran',
+        'VIDEOPHONIE': 'Vidéophonie',
+        'WIFI': 'WiFi'
+    };
+    return names[deviceType] || deviceType;
+}
+
+function showScreenSelectionModal(locationIndex, device) {
+    // Create modal if it doesn't exist
+    if (!document.getElementById('screenSelectionModal')) {
+        const modalHtml = `
+            <div class="modal fade" id="screenSelectionModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Sélection du type d'écran</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>Veuillez sélectionner le type d'écran :</p>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="screenType" id="screenSAT101" value="SAT101" checked>
+                                <label class="form-check-label" for="screenSAT101">
+                                    Écran SAT101
+                                </label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="screenType" id="screenSAT57" value="SAT57">
+                                <label class="form-check-label" for="screenSAT57">
+                                    Écran SAT57
+                                </label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="screenType" id="screenSAT40" value="SAT40">
+                                <label class="form-check-label" for="screenSAT40">
+                                    Écran SAT40
+                                </label>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                            <button type="button" class="btn btn-primary" id="confirmScreenType">Confirmer</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modalContainer = document.createElement('div');
+        modalContainer.innerHTML = modalHtml;
+        document.body.appendChild(modalContainer);
+    }
+    
+    // Store current location index and device in modal for reference
+    const modal = document.getElementById('screenSelectionModal');
+    modal.dataset.locationIndex = locationIndex;
+    
+    // Show the modal
+    const screenModal = new bootstrap.Modal(modal);
+    screenModal.show();
+    
+    // Add event listener for confirmation button
+    document.getElementById('confirmScreenType').onclick = function() {
+        const selectedScreenType = document.querySelector('input[name="screenType"]:checked').value;
+        const locationIndex = modal.dataset.locationIndex;
+        
+        // Update device name and specifications
+        device.name = `Écran ${selectedScreenType}`;
+        device.updateSpecifications({ screenType: selectedScreenType });
+        
+        // Add device to location
+        currentDomotiqueProject.locations[locationIndex].addDevice(device);
+        
+        // Refresh the UI
+        renderLocations();
+        
+        // Hide the modal
+        screenModal.hide();
+    };
+}
+
+function addNewLocation() {
+    if (!currentDomotiqueProject) {
+        alert('Veuillez d\'abord sélectionner un projet');
+        return;
+    }
+    
+    const locationName = prompt('Nom de l\'emplacement (ex: Cuisine, Salon, Chambre 1...):');
+    if (locationName) {
+        const newLocation = new Location(locationName);
+        currentDomotiqueProject.addLocation(newLocation);
+        renderLocations();
+    }
+}
+
+function removeLocation(index) {
+    if (!currentDomotiqueProject) return;
+    
+    if (confirm('Êtes-vous sûr de vouloir supprimer cet emplacement?')) {
+        currentDomotiqueProject.locations.splice(index, 1);
+        renderLocations();
+    }
+}
+
+function saveLocationSetup() {
+    if (!currentDomotiqueProject) {
+        alert('Aucun projet sélectionné');
+        return;
+    }
+    
+    // Update project in the projects array
+    const projectIndex = projects.findIndex(p => p.id === currentDomotiqueProject.id);
+    if (projectIndex !== -1) {
+        projects[projectIndex] = currentDomotiqueProject;
+    }
+    
+    alert('Configuration domotique enregistrée avec succès');
+    
+    // Update other views that might display project data
+    updateProjectsList();
+    updateDashboard();
+}
+
+function generateReportFromDomotique() {
+    if (!currentDomotiqueProject) {
+        alert('Veuillez d\'abord sélectionner un projet');
+        return;
+    }
+    
+    // Save current domotique project first
+    saveLocationSetup();
+    
+    // Switch to report view and select this project
+    showView('report');
+    document.getElementById('report-project-select').value = currentDomotiqueProject.id;
+    generateProjectReport();
+}
