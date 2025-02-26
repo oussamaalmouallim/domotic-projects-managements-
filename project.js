@@ -1,8 +1,9 @@
 class Project {
-    constructor(id, clientId, name) {
+    constructor(id, clientId, name, type = 'appartement') {
         this.id = id;
         this.clientId = clientId;
         this.name = name;
+        this.type = type; 
         this.locations = [];
         this.status = 'non_commence';
         this.history = [];
