@@ -7,6 +7,9 @@ let currentProjectReport = null;
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
+    // Load data from localStorage
+    loadDataFromLocalStorage();
+    
     initializeCalendar();
     updateClientsList();
     updateProjectsList();
@@ -29,9 +32,128 @@ document.addEventListener('DOMContentLoaded', function() {
         calendarNavItem.parentNode.insertBefore(domotiqueNavItem, calendarNavItem);
     }
     
+    // Add Project History link to sidebar
+    const historyLinkExists = document.querySelector('.sidebar .nav-link[onclick="showView(\'history\')"]');
+    if (!historyLinkExists) {
+        const navItems = document.querySelectorAll('.sidebar .nav-item');
+        const historyNavItem = document.createElement('li');
+        historyNavItem.className = 'nav-item';
+        historyNavItem.innerHTML = `
+            <a class="nav-link text-white" href="#" onclick="showView('history')">
+                <i class="bi bi-clock-history me-2"></i> Historique des projets
+            </a>
+        `;
+        // Insert after reports
+        const reportNavItem = document.querySelector('.sidebar .nav-link[onclick="showView(\'report\')"]').parentNode;
+        reportNavItem.parentNode.insertBefore(historyNavItem, reportNavItem.nextSibling);
+    }
+    
     updateDomotiqueProjectList();
     updateProjectReportList();
+    updateProjectHistoryList();
 }); 
+
+// Load data from localStorage
+function loadDataFromLocalStorage() {
+    // Load clients
+    const savedClients = localStorage.getItem('clients');
+    if (savedClients) {
+        clients = JSON.parse(savedClients);
+    }
+    
+    // Load projects with proper class instances
+    const savedProjects = localStorage.getItem('projects');
+    if (savedProjects) {
+        const parsedProjects = JSON.parse(savedProjects);
+        projects = parsedProjects.map(projectData => {
+            const project = new Project(
+                projectData.id,
+                projectData.clientId,
+                projectData.name,
+                projectData.type
+            );
+            
+            // Restore project properties
+            project.status = projectData.status;
+            project.history = projectData.history;
+            project.startDate = projectData.startDate ? new Date(projectData.startDate) : null;
+            project.endDate = projectData.endDate ? new Date(projectData.endDate) : null;
+            
+            // Restore locations and devices
+            if (projectData.locations) {
+                projectData.locations.forEach(locationData => {
+                    const location = new Location(locationData.name);
+                    location.notes = locationData.notes || '';
+                    
+                    // Add floor for villa type projects
+                    if (locationData.floor) {
+                        location.floor = locationData.floor;
+                    }
+                    
+                    // Restore devices
+                    if (locationData.devices) {
+                        locationData.devices.forEach(deviceData => {
+                            const device = new Device(deviceData.type, deviceData.name);
+                            device.specifications = deviceData.specifications || {};
+                            location.addDevice(device);
+                        });
+                    }
+                    
+                    project.addLocation(location);
+                });
+            }
+            
+            return project;
+        });
+    }
+    
+    // Load stock data
+    const savedStock = localStorage.getItem('stock');
+    if (savedStock) {
+        const stockData = JSON.parse(savedStock);
+        
+        // Restore inventory
+        if (stockData.inventory) {
+            Object.entries(stockData.inventory).forEach(([itemId, quantity]) => {
+                stockManager.inventory.set(itemId, quantity);
+            });
+        }
+        
+        // Restore minimum stock
+        if (stockData.minStock) {
+            Object.entries(stockData.minStock).forEach(([itemId, minQuantity]) => {
+                stockManager.minStock.set(itemId, minQuantity);
+            });
+        }
+        
+        // Restore history
+        if (stockData.history) {
+            stockManager.history = stockData.history.map(entry => {
+                return {
+                    ...entry,
+                    date: new Date(entry.date)
+                };
+            });
+        }
+    }
+}
+
+// Save data to localStorage
+function saveDataToLocalStorage() {
+    // Save clients
+    localStorage.setItem('clients', JSON.stringify(clients));
+    
+    // Save projects
+    localStorage.setItem('projects', JSON.stringify(projects));
+    
+    // Save stock data
+    const stockData = {
+        inventory: Object.fromEntries(stockManager.inventory),
+        minStock: Object.fromEntries(stockManager.minStock),
+        history: stockManager.history
+    };
+    localStorage.setItem('stock', JSON.stringify(stockData));
+}
 
 // Navigation
 function showView(viewName) {
@@ -64,6 +186,8 @@ function showView(viewName) {
         updateProjectReportList();
     } else if (viewName === 'domotique') {
         updateDomotiqueProjectList();
+    } else if (viewName === 'history') {
+        updateProjectHistoryList();
     }
 }
 
@@ -207,6 +331,7 @@ function saveClient() {
 
     updateClientsList();
     updateDashboard();
+    saveDataToLocalStorage(); // Save data after changes
     bootstrap.Modal.getInstance(document.getElementById('clientModal')).hide();
 }
 
@@ -216,6 +341,7 @@ function deleteClient(clientId) {
         clients = clients.filter(c => c.id !== numericId);
         updateClientsList();
         updateDashboard();
+        saveDataToLocalStorage(); // Save data after changes
     }
 }
 
@@ -341,6 +467,31 @@ function saveProject() {
         // Update existing project
         const project = projects.find(p => p.id === projectId);
         if (project) {
+            // Track changes to add to history
+            if (project.name !== projectName) {
+                project.addToHistory(`Nom du projet modifié: ${project.name} → ${projectName}`);
+            }
+            if (project.status !== projectStatus) {
+                project.addToHistory(`Statut du projet modifié: ${getStatusLabel(project.status)} → ${getStatusLabel(projectStatus)}`);
+            }
+            if (project.type !== projectType) {
+                project.addToHistory(`Type du projet modifié: ${project.type === 'villa' ? 'Villa' : 'Appartement'} → ${projectType === 'villa' ? 'Villa' : 'Appartement'}`);
+            }
+            
+            // Check for date changes
+            const oldStartDate = project.startDate ? new Date(project.startDate).toLocaleDateString('fr-FR') : 'Non définie';
+            const newStartDate = startDate ? new Date(startDate).toLocaleDateString('fr-FR') : 'Non définie';
+            if (oldStartDate !== newStartDate) {
+                project.addToHistory(`Date de début modifiée: ${oldStartDate} → ${newStartDate}`);
+            }
+            
+            const oldEndDate = project.endDate ? new Date(project.endDate).toLocaleDateString('fr-FR') : 'Non définie';
+            const newEndDate = endDate ? new Date(endDate).toLocaleDateString('fr-FR') : 'Non définie';
+            if (oldEndDate !== newEndDate) {
+                project.addToHistory(`Date de fin modifiée: ${oldEndDate} → ${newEndDate}`);
+            }
+            
+            // Update the project properties
             project.name = projectName;
             project.clientId = clientId;
             project.status = projectStatus;
@@ -354,6 +505,14 @@ function saveProject() {
         newProject.status = projectStatus;
         newProject.startDate = startDate ? new Date(startDate) : null;
         newProject.endDate = endDate ? new Date(endDate) : null;
+        
+        // Add creation event to history
+        newProject.addToHistory('Projet créé');
+        
+        if (projectStatus !== 'non_commence') {
+            newProject.addToHistory(`Statut initial: ${getStatusLabel(projectStatus)}`);
+        }
+        
         projects.push(newProject);
     }
     
@@ -362,7 +521,20 @@ function saveProject() {
     updateCalendarWithProjects(); // Update calendar with project dates
     updateDomotiqueProjectList(); // Update project list in domotique view
     updateProjectReportList(); // Update project list in report view
+    updateProjectHistoryList(); // Update project list in history view
+    saveDataToLocalStorage(); // Save data after changes
     bootstrap.Modal.getInstance(document.getElementById('projectModal')).hide();
+}
+
+function getStatusLabel(status) {
+    switch(status) {
+        case 'non_commence': return 'Non commencé';
+        case 'en_cours': return 'En cours';
+        case 'en_attente': return 'En attente';
+        case 'en_retard': return 'En retard';
+        case 'termine': return 'Terminé';
+        default: return 'Statut inconnu';
+    }
 }
 
 function deleteProject(projectId) {
@@ -373,6 +545,8 @@ function deleteProject(projectId) {
         updateCalendarWithProjects(); // Update calendar after deleting project
         updateDomotiqueProjectList(); // Update project list in domotique view
         updateProjectReportList(); // Update project list in report view
+        updateProjectHistoryList(); // Update project list in history view
+        saveDataToLocalStorage(); // Save data after changes
     }
 }
 
@@ -497,6 +671,7 @@ function saveStock() {
     stockManager.addItem(itemId, quantity, minQuantity);
     updateStockList();
     updateDashboard();
+    saveDataToLocalStorage(); // Save data after changes
     bootstrap.Modal.getInstance(document.getElementById('stockModal')).hide();
 }
 
@@ -506,6 +681,7 @@ function removeStock(itemId) {
         if (stockManager.removeItem(itemId, quantity)) {
             updateStockList();
             updateDashboard();
+            saveDataToLocalStorage(); // Save data after changes
         } else {
             alert('Stock insuffisant');
         }
@@ -772,38 +948,118 @@ function generateProjectReport() {
         `).join('');
     
     // Create locations detailed summary
-    const locationsHtml = reportData.locationSummary.map(location => {
-        const devicesList = Object.entries(location.devicesByType).map(([type, devices]) => {
-            return devices.map(device => {
-                let deviceDetails = deviceTypesTranslation[type] || type;
-                
-                // Special handling for screens with specifications
-                if (type === 'ECRAN' && device.specifications && device.specifications.screenType) {
-                    deviceDetails += ` (${device.specifications.screenType})`;
-                }
-                
-                return `<li>${deviceDetails}</li>`;
-            }).join('');
-        }).join('');
+    let locationsHtml = '';
+    
+    // Check if the project is a villa type to group by floors
+    if (project.type === 'villa') {
+        // Group locations by floor
+        const floorLocations = {
+            'SOUS_SOL': [],
+            'RDC': [],
+            'ETAGE': []
+        };
         
-        return `
-            <div class="col-md-6 mb-4">
-                <div class="card location-summary-card">
-                    <div class="card-header">
-                        <h5>${location.name}</h5>
+        // Assign locations to their respective floors
+        reportData.locationSummary.forEach(location => {
+            const originalLocation = project.locations.find(l => l.name === location.name);
+            const floor = originalLocation && originalLocation.floor ? originalLocation.floor : 'RDC';
+            floorLocations[floor].push(location);
+        });
+        
+        // Render locations grouped by floor
+        locationsHtml = Object.entries(floorLocations).map(([floor, locations]) => {
+            const floorName = getFloorName(floor);
+            
+            // Skip empty floors
+            if (locations.length === 0) {
+                return '';
+            }
+            
+            // Create locations cards for this floor
+            const floorLocationsHtml = locations.map(location => {
+                const devicesList = Object.entries(location.devicesByType).map(([type, devices]) => {
+                    return devices.map(device => {
+                        let deviceDetails = deviceTypesTranslation[type] || type;
+                        
+                        // Special handling for screens with specifications
+                        if (type === 'ECRAN' && device.specifications && device.specifications.screenType) {
+                            deviceDetails += ` (${device.specifications.screenType})`;
+                        }
+                        
+                        return `<li>${deviceDetails}</li>`;
+                    }).join('');
+                }).join('');
+                
+                return `
+                    <div class="col-md-6 mb-4">
+                        <div class="card location-summary-card">
+                            <div class="card-header">
+                                <h5>${location.name}</h5>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Nombre d'équipements:</strong> ${location.deviceCount}</p>
+                                <p><strong>Équipements:</strong></p>
+                                <ul>
+                                    ${devicesList || '<li>Aucun équipement</li>'}
+                                </ul>
+                                ${location.notes ? `<p><strong>Notes:</strong> ${location.notes}</p>` : ''}
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <p><strong>Nombre d'équipements:</strong> ${location.deviceCount}</p>
-                        <p><strong>Équipements:</strong></p>
-                        <ul>
-                            ${devicesList || '<li>Aucun équipement</li>'}
-                        </ul>
-                        ${location.notes ? `<p><strong>Notes:</strong> ${location.notes}</p>` : ''}
+                `;
+            }).join('');
+            
+            // Return the floor section with its locations
+            return `
+                <div class="mb-4">
+                    <div class="floor-heading">
+                        <h4>${floorName}</h4>
+                    </div>
+                    <div class="row">
+                        ${floorLocationsHtml}
                     </div>
                 </div>
+            `;
+        }).join('');
+    } else {
+        // Regular rendering for apartments (no floors)
+        locationsHtml = `
+            <div class="row">
+                ${reportData.locationSummary.map(location => {
+                    const devicesList = Object.entries(location.devicesByType).map(([type, devices]) => {
+                        return devices.map(device => {
+                            let deviceDetails = deviceTypesTranslation[type] || type;
+                            
+                            // Special handling for screens with specifications
+                            if (type === 'ECRAN' && device.specifications && device.specifications.screenType) {
+                                deviceDetails += ` (${device.specifications.screenType})`;
+                            }
+                            
+                            return `<li>${deviceDetails}</li>`;
+                        }).join('');
+                    }).join('');
+                    
+                    return `
+                        <div class="col-md-6 mb-4">
+                            <div class="card location-summary-card">
+                                <div class="card-header">
+                                    <h5>${location.name}</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>Nombre d'équipements:</strong> ${location.deviceCount}</p>
+                                    <p><strong>Équipements:</strong></p>
+                                    <ul>
+                                        ${devicesList || '<li>Aucun équipement</li>'}
+                                    </ul>
+                                    ${location.notes ? `<p><strong>Notes:</strong> ${location.notes}</p>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
             </div>
         `;
-    }).join('');
+    }
     
     // Format dates for display
     const startDateDisplay = project.startDate ? new Date(project.startDate).toLocaleDateString('fr-FR') : 'Non définie';
@@ -821,6 +1077,7 @@ function generateProjectReport() {
                         <span class="ms-3"><i class="bi bi-calendar-event"></i> Début: ${startDateDisplay}</span>
                         <span class="ms-3"><i class="bi bi-calendar-check"></i> Fin prévue: ${endDateDisplay}</span>
                     </p>
+                    <p><strong>Type de projet:</strong> ${project.type === 'villa' ? 'Villa' : 'Appartement'}</p>
                 </div>
                 <div class="col-md-4 text-end">
                     <button class="btn btn-outline-primary" onclick="printReport()">
@@ -850,9 +1107,7 @@ function generateProjectReport() {
 
         <div class="mb-4">
             <h4>Détails par emplacement</h4>
-            <div class="row">
-                ${locationsHtml || '<div class="col-12 text-center">Aucun emplacement configuré</div>'}
-            </div>
+            ${locationsHtml || '<div class="col-12 text-center">Aucun emplacement configuré</div>'}
         </div>
     `;
 }
@@ -1048,7 +1303,7 @@ function renderDeviceCheckbox(locationIndex, deviceType, label, location) {
     const isChecked = device !== undefined;
     
     let additionalInfo = '';
-    if (isChecked && deviceType === 'ECRAN' && device.specifications.screenType) {
+    if (isChecked && deviceType === 'ECRAN' && device.specifications && device.specifications.screenType) {
         additionalInfo = ` <span class="badge bg-info">${device.specifications.screenType}</span>`;
     }
     
@@ -1082,11 +1337,24 @@ function toggleDevice(locationIndex, deviceType, isChecked) {
                 showScreenSelectionModal(locationIndex, newDevice);
             } else {
                 location.addDevice(newDevice);
+                
+                // Add to history - track device addition
+                currentDomotiqueProject.addToHistory(`Équipement ajouté: ${getDeviceName(deviceType)} à ${location.name}`);
+                
+                saveDataToLocalStorage(); // Save data after changes
             }
         }
     } else {
         // Remove device if it exists
-        location.devices = location.devices.filter(d => d.type !== deviceType);
+        const deviceExists = location.devices.some(d => d.type === deviceType);
+        if (deviceExists) {
+            location.devices = location.devices.filter(d => d.type !== deviceType);
+            
+            // Add to history - track device removal
+            currentDomotiqueProject.addToHistory(`Équipement supprimé: ${getDeviceName(deviceType)} de ${location.name}`);
+            
+            saveDataToLocalStorage(); // Save data after changes
+        }
     }
 }
 
@@ -1212,15 +1480,40 @@ function showLocationSelectionModal(selectedFloor = null) {
             'Terasse'
         ];
         
+        // Group locations by category to make selection easier
+        const locationGroups = {
+            'Pièces principales': ['Salon', 'Salon Europe', 'Chambre', 'Chambre parentale'],
+            'Pièces de détente': ['Bibliothèque', 'Cinema', 'Bureau', 'Salle de jeux', 'Espace de lecture'],
+            'Pièces de service': ['Cuisine', 'SDB', 'Dressing', 'Hall'],
+            'Extérieur': ['Jardin', 'Piscine', 'Terasse']
+        };
+        
         let locationOptionsHtml = '';
-        predefinedLocations.forEach(location => {
+        Object.entries(locationGroups).forEach(([groupName, locations]) => {
             locationOptionsHtml += `
-                <div class="col-md-6 mb-2">
-                    <div class="form-check">
-                        <input class="form-check-input location-option" type="radio" name="locationOption" id="location-${location}" value="${location}">
-                        <label class="form-check-label" for="location-${location}">
-                            ${location}
-                        </label>
+                <div class="card mb-3">
+                    <div class="card-header">
+                        ${groupName}
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+            `;
+            
+            locations.forEach(location => {
+                locationOptionsHtml += `
+                    <div class="col-md-6 mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input location-option" type="checkbox" name="locationOption" id="location-${location}" value="${location}">
+                            <label class="form-check-label" for="location-${location}">
+                                ${location}
+                            </label>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            locationOptionsHtml += `
+                        </div>
                     </div>
                 </div>
             `;
@@ -1245,13 +1538,13 @@ function showLocationSelectionModal(selectedFloor = null) {
                                 </select>
                             </div>
                             ` : ''}
-                            <p>Veuillez sélectionner un emplacement ou saisir un nouveau :</p>
-                            <div class="row mt-3">
+                            <p>Veuillez sélectionner un ou plusieurs emplacements :</p>
+                            <div class="mt-3 location-selection-group">
                                 ${locationOptionsHtml}
                             </div>
                             <div class="mt-3">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="locationOption" id="location-other" value="other">
+                                    <input class="form-check-input" type="checkbox" name="locationOption" id="location-other" value="other">
                                     <label class="form-check-label" for="location-other">
                                         Autre (préciser)
                                     </label>
@@ -1260,10 +1553,103 @@ function showLocationSelectionModal(selectedFloor = null) {
                                     <input type="text" class="form-control" id="custom-location-name" placeholder="Nom de l'emplacement">
                                 </div>
                             </div>
+                            
+                            <div id="equipment-selection-container" class="mt-4 d-none">
+                                <h5>Équipements pour ces emplacements</h5>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input bulk-device-checkbox" type="checkbox" id="bulk-device-ON_OFF" data-type="ON_OFF">
+                                            <label class="form-check-label" for="bulk-device-ON_OFF">
+                                                Éclairage ON/OFF
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input bulk-device-checkbox" type="checkbox" id="bulk-device-DIMMER" data-type="DIMMER">
+                                            <label class="form-check-label" for="bulk-device-DIMMER">
+                                                Éclairage variation DIM
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input bulk-device-checkbox" type="checkbox" id="bulk-device-SONORISATION" data-type="SONORISATION">
+                                            <label class="form-check-label" for="bulk-device-SONORISATION">
+                                                Sonorisation
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input bulk-device-checkbox" type="checkbox" id="bulk-device-CLIMATISATION" data-type="CLIMATISATION">
+                                            <label class="form-check-label" for="bulk-device-CLIMATISATION">
+                                                Climatisation
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input bulk-device-checkbox" type="checkbox" id="bulk-device-CHAUFFAGE" data-type="CHAUFFAGE">
+                                            <label class="form-check-label" for="bulk-device-CHAUFFAGE">
+                                                Chauffage
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input bulk-device-checkbox" type="checkbox" id="bulk-device-CAMERA" data-type="CAMERA">
+                                            <label class="form-check-label" for="bulk-device-CAMERA">
+                                                Caméra
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input bulk-device-checkbox" type="checkbox" id="bulk-device-VOLET" data-type="VOLET">
+                                            <label class="form-check-label" for="bulk-device-VOLET">
+                                                Volet roulant
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input bulk-device-checkbox" type="checkbox" id="bulk-device-ECRAN" data-type="ECRAN">
+                                            <label class="form-check-label" for="bulk-device-ECRAN">
+                                                Écran
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input bulk-device-checkbox" type="checkbox" id="bulk-device-VIDEOPHONIE" data-type="VIDEOPHONIE">
+                                            <label class="form-check-label" for="bulk-device-VIDEOPHONIE">
+                                                Vidéophonie
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input bulk-device-checkbox" type="checkbox" id="bulk-device-WIFI" data-type="WIFI">
+                                            <label class="form-check-label" for="bulk-device-WIFI">
+                                                WiFi
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="bulk-screen-selection" class="mt-3 d-none">
+                                    <label class="form-label">Type d'écran:</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="bulkScreenType" id="bulkScreenSAT101" value="SAT101" checked>
+                                        <label class="form-check-label" for="bulkScreenSAT101">
+                                            Écran SAT101
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="bulkScreenType" id="bulkScreenSAT57" value="SAT57">
+                                        <label class="form-check-label" for="bulkScreenSAT57">
+                                            Écran SAT57
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="bulkScreenType" id="bulkScreenSAT40" value="SAT40">
+                                        <label class="form-check-label" for="bulkScreenSAT40">
+                                            Écran SAT40
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
                             <button type="button" class="btn btn-primary" id="confirmLocationSelection">Confirmer</button>
+                            <button type="button" class="btn btn-outline-primary" id="selectAllLocations">Tout sélectionner</button>
+                            <button type="button" class="btn btn-outline-secondary" id="deselectAllLocations">Tout désélectionner</button>
                         </div>
                     </div>
                 </div>
@@ -1275,15 +1661,60 @@ function showLocationSelectionModal(selectedFloor = null) {
         
         // Add event listener for "other" option to show/hide custom location input
         document.getElementById('location-other').addEventListener('change', function() {
-            document.getElementById('custom-location-container').classList.remove('d-none');
+            if (this.checked) {
+                document.getElementById('custom-location-container').classList.remove('d-none');
+            } else {
+                document.getElementById('custom-location-container').classList.add('d-none');
+            }
         });
         
-        // Add event listeners for predefined locations to hide custom input
-        document.querySelectorAll('.location-option').forEach(radio => {
-            radio.addEventListener('change', function() {
-                document.getElementById('custom-location-container').classList.add('d-none');
+        // Add event listeners for select all / deselect all buttons
+        document.getElementById('selectAllLocations').addEventListener('click', function() {
+            document.querySelectorAll('input[name="locationOption"]').forEach(checkbox => {
+                if (checkbox.value !== 'other') {
+                    checkbox.checked = true;
+                }
             });
+            updateEquipmentSelectionVisibility();
         });
+        
+        document.getElementById('deselectAllLocations').addEventListener('click', function() {
+            document.querySelectorAll('input[name="locationOption"]').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            document.getElementById('custom-location-container').classList.add('d-none');
+            updateEquipmentSelectionVisibility();
+        });
+        
+        // Add event listeners for all location checkboxes to show/hide equipment selection
+        document.querySelectorAll('input[name="locationOption"]').forEach(checkbox => {
+            checkbox.addEventListener('change', updateEquipmentSelectionVisibility);
+        });
+        
+        // Add event listener for ECRAN device to show/hide screen type selection
+        document.getElementById('bulk-device-ECRAN').addEventListener('change', function() {
+            if (this.checked) {
+                document.getElementById('bulk-screen-selection').classList.remove('d-none');
+            } else {
+                document.getElementById('bulk-screen-selection').classList.add('d-none');
+            }
+        });
+    }
+    
+    // Function to show equipment selection if multiple locations are selected
+    function updateEquipmentSelectionVisibility() {
+        const selectedLocations = document.querySelectorAll('input[name="locationOption"]:checked');
+        const equipmentContainer = document.getElementById('equipment-selection-container');
+        
+        if (selectedLocations.length > 1) {
+            equipmentContainer.classList.remove('d-none');
+        } else {
+            equipmentContainer.classList.add('d-none');
+            document.getElementById('bulk-screen-selection').classList.add('d-none');
+            document.querySelectorAll('.bulk-device-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+        }
     }
     
     // Show the modal
@@ -1305,46 +1736,82 @@ function showLocationSelectionModal(selectedFloor = null) {
     }
     
     // Reset form
-    document.querySelectorAll('input[name="locationOption"]').forEach(radio => {
-        radio.checked = false;
+    document.querySelectorAll('input[name="locationOption"]').forEach(checkbox => {
+        checkbox.checked = false;
     });
     document.getElementById('custom-location-container').classList.add('d-none');
     if (document.getElementById('custom-location-name')) {
         document.getElementById('custom-location-name').value = '';
     }
+    document.getElementById('equipment-selection-container').classList.add('d-none');
+    document.querySelectorAll('.bulk-device-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    document.getElementById('bulk-screen-selection').classList.add('d-none');
     
     // Add event listener for confirmation button
     document.getElementById('confirmLocationSelection').onclick = function() {
-        const selectedOption = document.querySelector('input[name="locationOption"]:checked');
+        const selectedOptions = document.querySelectorAll('input[name="locationOption"]:checked');
         
-        if (!selectedOption) {
-            alert('Veuillez sélectionner un emplacement');
+        if (selectedOptions.length === 0) {
+            alert('Veuillez sélectionner au moins un emplacement');
             return;
         }
         
-        let locationName;
-        if (selectedOption.value === 'other') {
-            locationName = document.getElementById('custom-location-name').value.trim();
-            if (!locationName) {
-                alert('Veuillez saisir un nom pour l\'emplacement');
-                return;
-            }
-        } else {
-            locationName = selectedOption.value;
+        const floorValue = currentDomotiqueProject.type === 'villa' ? 
+            document.getElementById('floor-select').value : null;
+        
+        // Check if bulk equipment selection should be applied
+        const bulkEquipment = [];
+        if (selectedOptions.length > 1) {
+            document.querySelectorAll('.bulk-device-checkbox:checked').forEach(checkbox => {
+                const deviceType = checkbox.dataset.type;
+                let device = new Device(deviceType, getDeviceName(deviceType));
+                
+                // Special handling for screen type
+                if (deviceType === 'ECRAN') {
+                    const screenType = document.querySelector('input[name="bulkScreenType"]:checked').value;
+                    device.name = `Écran ${screenType}`;
+                    device.updateSpecifications({ screenType: screenType });
+                }
+                
+                bulkEquipment.push(device);
+            });
         }
         
-        // Create new location and add to project
-        const newLocation = new Location(locationName);
-        
-        // Set floor for villa type projects
-        if (currentDomotiqueProject.type === 'villa') {
-            const floorSelect = document.getElementById('floor-select');
-            if (floorSelect) {
-                newLocation.floor = floorSelect.value;
+        // Process all selected options
+        selectedOptions.forEach(option => {
+            if (option.value === 'other') {
+                // Handle custom location
+                const customName = document.getElementById('custom-location-name').value.trim();
+                if (customName) {
+                    const locationId = addLocationToProject(customName, floorValue);
+                    
+                    // Add bulk devices to this location if applicable
+                    if (bulkEquipment.length > 0) {
+                        bulkEquipment.forEach(device => {
+                            const newDevice = new Device(device.type, device.name);
+                            newDevice.specifications = {...device.specifications};
+                            currentDomotiqueProject.locations[locationId].addDevice(newDevice);
+                        });
+                    }
+                }
+            } else {
+                // Handle predefined location
+                const locationId = addLocationToProject(option.value, floorValue);
+                
+                // Add bulk devices to this location if applicable
+                if (bulkEquipment.length > 0) {
+                    bulkEquipment.forEach(device => {
+                        const newDevice = new Device(device.type, device.name);
+                        newDevice.specifications = {...device.specifications};
+                        currentDomotiqueProject.locations[locationId].addDevice(newDevice);
+                    });
+                }
             }
-        }
+        });
         
-        currentDomotiqueProject.addLocation(newLocation);
+        // Refresh the UI
         renderLocations();
         
         // Hide the modal
@@ -1352,11 +1819,39 @@ function showLocationSelectionModal(selectedFloor = null) {
     };
 }
 
+// Helper function to add a location to the current project
+function addLocationToProject(locationName, floor = null) {
+    if (!locationName) return -1;
+    
+    const newLocation = new Location(locationName);
+    
+    // Set floor for villa type projects
+    if (floor) {
+        newLocation.floor = floor;
+    }
+    
+    currentDomotiqueProject.addLocation(newLocation);
+    
+    // Add to history - track location creation
+    currentDomotiqueProject.addToHistory(`Nouvel emplacement ajouté: ${locationName}${floor ? ' (' + getFloorName(floor).toLowerCase() + ')' : ''}`);
+    
+    saveDataToLocalStorage(); // Save data after changes
+    
+    return currentDomotiqueProject.locations.length - 1;
+}
+
 function removeLocation(index) {
     if (!currentDomotiqueProject) return;
     
     if (confirm('Êtes-vous sûr de vouloir supprimer cet emplacement?')) {
+        const locationName = currentDomotiqueProject.locations[index].name;
         currentDomotiqueProject.locations.splice(index, 1);
+        
+        // Add to history - track location removal
+        currentDomotiqueProject.addToHistory(`Emplacement supprimé: ${locationName}`);
+        
+        saveDataToLocalStorage(); // Save data after changes
+        
         renderLocations();
     }
 }
@@ -1367,17 +1862,23 @@ function saveLocationSetup() {
         return;
     }
     
+    // Add history event about saving domotique setup
+    currentDomotiqueProject.addToHistory('Configuration domotique mise à jour');
+    
     // Update project in the projects array
     const projectIndex = projects.findIndex(p => p.id === currentDomotiqueProject.id);
     if (projectIndex !== -1) {
         projects[projectIndex] = currentDomotiqueProject;
     }
     
+    saveDataToLocalStorage(); // Save data after changes
+    
     alert('Configuration domotique enregistrée avec succès');
     
     // Update other views that might display project data
     updateProjectsList();
     updateDashboard();
+    updateProjectHistoryList(); // Update history view
 }
 
 function generateReportFromDomotique() {
@@ -1398,4 +1899,237 @@ function generateReportFromDomotique() {
     // Set the project and generate report
     document.getElementById('report-project-select').value = currentDomotiqueProject.id;
     generateProjectReport();
+}
+
+// Project History functions
+function updateProjectHistoryList() {
+    const projectSelect = document.getElementById('history-project-select');
+    if (projectSelect) {
+        const currentValue = projectSelect.value;
+        projectSelect.innerHTML = `
+            <option value="">Sélectionner un projet</option>
+            ${projects.map(project => {
+                const client = clients.find(c => c.id === project.clientId);
+                const clientName = client ? client.name : 'Client inconnu';
+                return `
+                    <option value="${project.id}" ${currentValue === project.id ? 'selected' : ''}>
+                        ${project.name} (${clientName})
+                    </option>
+                `;
+            }).join('')}
+        `;
+    }
+}
+
+function showProjectHistory() {
+    const projectId = document.getElementById('history-project-select').value;
+    const historyContainer = document.getElementById('project-history-container');
+    
+    if (!projectId) {
+        historyContainer.innerHTML = '<div class="alert alert-warning">Veuillez sélectionner un projet</div>';
+        return;
+    }
+    
+    const project = projects.find(p => p.id === projectId);
+    
+    if (!project) {
+        historyContainer.innerHTML = '<div class="alert alert-danger">Projet non trouvé</div>';
+        return;
+    }
+    
+    const client = clients.find(c => c.id === project.clientId);
+    const clientName = client ? client.name : 'Client inconnu';
+    
+    // Get status info for display
+    let statusClass, statusText;
+    switch(project.status) {
+        case 'non_commence':
+            statusClass = 'bg-secondary';
+            statusText = 'Non commencé';
+            break;
+        case 'en_cours':
+            statusClass = 'bg-primary';
+            statusText = 'En cours';
+            break;
+        case 'en_attente':
+            statusClass = 'bg-warning text-dark';
+            statusText = 'En attente';
+            break;
+        case 'en_retard':
+            statusClass = 'bg-danger';
+            statusText = 'En retard';
+            break;
+        case 'termine':
+            statusClass = 'bg-success';
+            statusText = 'Terminé';
+            break;
+        default:
+            statusClass = 'bg-secondary';
+            statusText = 'Statut inconnu';
+    }
+    
+    // Format dates for display
+    const startDateDisplay = project.startDate ? new Date(project.startDate).toLocaleDateString('fr-FR') : 'Non définie';
+    const endDateDisplay = project.endDate ? new Date(project.endDate).toLocaleDateString('fr-FR') : 'Non définie';
+    
+    // Prepare locations details
+    let locationsHtml = '';
+    
+    if (project.locations.length === 0) {
+        locationsHtml = `
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Détails des emplacements</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">Aucun emplacement configuré pour ce projet</div>
+                </div>
+            </div>
+        `;
+    } else {
+        // Check if the project is a villa type to group by floors
+        if (project.type === 'villa') {
+            // Group locations by floor
+            const floorLocations = {
+                'SOUS_SOL': [],
+                'RDC': [],
+                'ETAGE': []
+            };
+            
+            // Assign locations to their respective floors
+            project.locations.forEach(location => {
+                const floor = location.floor || 'RDC';
+                floorLocations[floor].push(location);
+            });
+            
+            // Render locations grouped by floor
+            locationsHtml = `
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>Détails des emplacements</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="accordion" id="historyLocationAccordion">
+                            ${Object.entries(floorLocations).map(([floor, locations]) => {
+                                if (locations.length === 0) return '';
+                                
+                                const floorName = getFloorName(floor);
+                                return `
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button ${floor === 'RDC' ? '' : 'collapsed'}" type="button" 
+                                                    data-bs-toggle="collapse" data-bs-target="#historyCollapse${floor}">
+                                                ${floorName} (${locations.length} emplacements)
+                                            </button>
+                                        </h2>
+                                        <div id="historyCollapse${floor}" class="accordion-collapse collapse ${floor === 'RDC' ? 'show' : ''}" 
+                                             data-bs-parent="#historyLocationAccordion">
+                                            <div class="accordion-body">
+                                                <div class="row">
+                                                    ${locations.map(location => renderHistoryLocationCard(location)).join('')}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Regular rendering for apartments (no floors)
+            locationsHtml = `
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>Détails des emplacements</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            ${project.locations.map(location => renderHistoryLocationCard(location)).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    // Render the complete history view
+    historyContainer.innerHTML = `
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>${project.name}</h4>
+                <div class="mt-2">
+                    <span class="badge ${statusClass}">${statusText}</span>
+                    <span class="ms-2">Client: ${clientName}</span>
+                    <span class="ms-3"><i class="bi bi-calendar-event"></i> Début: ${startDateDisplay}</span>
+                    <span class="ms-3"><i class="bi bi-calendar-check"></i> Fin prévue: ${endDateDisplay}</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <p><strong>Type de projet:</strong> ${project.type === 'villa' ? 'Villa' : 'Appartement'}</p>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <h4>Détails des emplacements</h4>
+            ${locationsHtml}
+        </div>
+    `;
+}
+
+// Helper function to render a location card for history view
+function renderHistoryLocationCard(location) {
+    // Device types translation
+    const deviceTypesTranslation = {
+        'ON_OFF': 'Éclairage ON/OFF',
+        'DIMMER': 'Éclairage variation DIM',
+        'SONORISATION': 'Sonorisation',
+        'CLIMATISATION': 'Climatisation',
+        'CHAUFFAGE': 'Chauffage',
+        'CAMERA': 'Caméra',
+        'VOLET': 'Volet roulant',
+        'ECRAN': 'Écran',
+        'VIDEOPHONIE': 'Vidéophonie',
+        'WIFI': 'WiFi'
+    };
+
+    // Group devices by type
+    const devicesByType = {};
+    location.devices.forEach(device => {
+        devicesByType[device.type] = devicesByType[device.type] || [];
+        devicesByType[device.type].push(device);
+    });
+    
+    // Create devices list
+    const devicesList = Object.entries(devicesByType).map(([type, devices]) => {
+        return devices.map(device => {
+            let deviceDetails = deviceTypesTranslation[type] || type;
+            
+            // Special handling for screens with specifications
+            if (type === 'ECRAN' && device.specifications && device.specifications.screenType) {
+                deviceDetails += ` (${device.specifications.screenType})`;
+            }
+            
+            return `<li>${deviceDetails}</li>`;
+        }).join('');
+    }).join('');
+    
+    return `
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6>${location.name}</h6>
+                </div>
+                <div class="card-body">
+                    <p><strong>Nombre d'équipements:</strong> ${location.devices.length}</p>
+                    <p><strong>Équipements:</strong></p>
+                    <ul>
+                        ${devicesList || '<li>Aucun équipement</li>'}
+                    </ul>
+                    ${location.notes ? `<p><strong>Notes:</strong> ${location.notes}</p>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
 }
