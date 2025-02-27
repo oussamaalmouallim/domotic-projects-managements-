@@ -203,6 +203,7 @@
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
+/* Timeline for project history */
 .timeline {
     position: relative;
     margin: 1rem auto;
@@ -244,6 +245,18 @@
     position: relative;
 }
 
+.timeline-item-content:before {
+    content: '';
+    position: absolute;
+    right: 100%;
+    top: 10px;
+    width: 0;
+    height: 0;
+    border-top: 8px solid transparent;
+    border-right: 15px solid #f8f9fa;
+    border-bottom: 8px solid transparent;
+}
+
 .timeline-item-date {
     font-size: 0.8rem;
     color: #6c757d;
@@ -271,6 +284,67 @@
 
 .floor-container {
     margin-bottom: 20px;
+}
+
+/* Add new styles for checkbox selection */
+.location-selection-group {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    padding: 0;
+}
+
+.location-selection-group .card {
+    border-radius: 0;
+    margin-bottom: 0;
+    border-left: none;
+    border-right: none;
+}
+
+.location-selection-group .card:first-child {
+    border-top: none;
+}
+
+.location-selection-group .card:last-child {
+    border-bottom: none;
+}
+
+.location-selection-group .card-header {
+    background-color: #f1f8ff;
+    font-weight: bold;
+}
+
+.location-selection-group .row {
+    margin-right: 0;
+    margin-left: 0;
+}
+
+.location-option:checked + label {
+    font-weight: bold;
+    color: #0d6efd;
+}
+
+.modal-dialog.modal-lg {
+    max-width: 800px;
+}
+
+/* History view styles */
+#historyLocationAccordion .accordion-button:not(.collapsed) {
+    background-color: #e7f1ff;
+    color: #0c63e4;
+}
+
+#historyLocationAccordion .accordion-button:focus {
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+#historyLocationAccordion .accordion-item {
+    margin-bottom: 0.5rem;
+}
+
+#project-history-container .timeline {
+    margin-top: 1rem;
 }
 
 @media print {
