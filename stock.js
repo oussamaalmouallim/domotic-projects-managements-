@@ -9,6 +9,11 @@ class StockManager {
         this.inventory.set(itemId, (this.inventory.get(itemId) || 0) + quantity);
         this.minStock.set(itemId, minQuantity);
         this.addToHistory(itemId, 'add', quantity);
+        
+        // Save to localStorage after inventory update
+        if (typeof saveDataToLocalStorage === 'function') {
+            saveDataToLocalStorage();
+        }
     }
 
     removeItem(itemId, quantity) {
@@ -16,6 +21,12 @@ class StockManager {
         if (currentStock >= quantity) {
             this.inventory.set(itemId, currentStock - quantity);
             this.addToHistory(itemId, 'remove', quantity);
+            
+            // Save to localStorage after inventory update
+            if (typeof saveDataToLocalStorage === 'function') {
+                saveDataToLocalStorage();
+            }
+            
             return true;
         }
         return false;
@@ -46,6 +57,11 @@ class StockManager {
             action,
             quantity
         });
+        
+        // Save to localStorage after history update
+        if (typeof saveDataToLocalStorage === 'function') {
+            saveDataToLocalStorage();
+        }
     }
 
     getHistory(itemId = null) {
