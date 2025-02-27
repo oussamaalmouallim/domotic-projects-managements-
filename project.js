@@ -17,8 +17,31 @@ class Project {
     }
 
     updateStatus(newStatus) {
+        const oldStatus = this.status;
         this.status = newStatus;
-        this.addToHistory('Mise à jour statut: ' + newStatus);
+        
+        // Get user-friendly status labels
+        let statusText;
+        switch(oldStatus) {
+            case 'non_commence': statusText = 'Non commencé'; break;
+            case 'en_cours': statusText = 'En cours'; break;
+            case 'en_attente': statusText = 'En attente'; break;
+            case 'en_retard': statusText = 'En retard'; break;
+            case 'termine': statusText = 'Terminé'; break;
+            default: statusText = 'Statut inconnu';
+        }
+        
+        let newStatusText;
+        switch(newStatus) {
+            case 'non_commence': newStatusText = 'Non commencé'; break;
+            case 'en_cours': newStatusText = 'En cours'; break;
+            case 'en_attente': newStatusText = 'En attente'; break;
+            case 'en_retard': newStatusText = 'En retard'; break;
+            case 'termine': newStatusText = 'Terminé'; break;
+            default: newStatusText = 'Statut inconnu';
+        }
+        
+        this.addToHistory(`Mise à jour statut: ${statusText} → ${newStatusText}`);
     }
 
     addToHistory(action) {
@@ -26,6 +49,11 @@ class Project {
             date: new Date(),
             action: action
         });
+        
+        // Save to localStorage after history update
+        if (typeof saveDataToLocalStorage === 'function') {
+            saveDataToLocalStorage();
+        }
     }
 
     calculateRequirements() {
