@@ -46,8 +46,8 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link text-white" href="#" onclick="showView('history')">
-                            <i class="bi bi-clock-history me-2"></i> Historique des projets
+                        <a class="nav-link text-white" href="#" onclick="showView('database')">
+                            <i class="bi bi-table me-2"></i> Base de données projets
                         </a>
                     </li>
                 </ul>
@@ -96,6 +96,21 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Projects Database View -->
+                <div id="database-view" class="view-section d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h1>Base de données projets</h1>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Tous les projets</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="projects-database-table" class="table-responsive"></div>
                         </div>
                     </div>
                 </div>
@@ -197,36 +212,6 @@
                         <button id="exportToGSheetsBtn" class="btn btn-outline-success" onclick="exportReportToGoogleSheets()">
                             <i class="bi bi-table"></i> Exporter vers Google Sheets
                         </button>
-                    </div>
-                </div>
-
-                <!-- Project History View -->
-                <div id="history-view" class="view-section d-none">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h1>Historique des projets</h1>
-                    </div>
-                    <div class="row mb-4">
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h5>Sélection du projet</h5>
-                                </div>
-                                <div class="card-body">
-                                    <select id="history-project-select" class="form-select mb-3">
-                                        <option value="">Sélectionner un projet</option>
-                                    </select>
-                                    <button class="btn btn-primary" onclick="showProjectHistory()">
-                                        <i class="bi bi-clock-history me-2"></i>Afficher l'historique
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="project-history-container">
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle me-2"></i>
-                            Sélectionnez un projet pour voir son historique des modifications
-                        </div>
                     </div>
                 </div>
 
@@ -386,6 +371,24 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
                     <button type="button" class="btn btn-primary" onclick="saveProject()">Enregistrer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Details Modal -->
+    <div class="modal fade" id="projectDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Détails du projet</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Content will be inserted dynamically -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
                 </div>
             </div>
         </div>

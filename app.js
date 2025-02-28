@@ -31,25 +31,25 @@ document.addEventListener('DOMContentLoaded', function() {
         calendarNavItem.parentNode.insertBefore(domotiqueNavItem, calendarNavItem);
     }
     
-    // Add Project History link to sidebar
-    const historyLinkExists = document.querySelector('.sidebar .nav-link[onclick="showView(\'history\')"]');
-    if (!historyLinkExists) {
+    // Add Projects Database link to sidebar
+    const databaseLinkExists = document.querySelector('.sidebar .nav-link[onclick="showView(\'database\')"]');
+    if (!databaseLinkExists) {
         const navItems = document.querySelectorAll('.sidebar .nav-item');
-        const historyNavItem = document.createElement('li');
-        historyNavItem.className = 'nav-item';
-        historyNavItem.innerHTML = `
-            <a class="nav-link text-white" href="#" onclick="showView('history')">
-                <i class="bi bi-clock-history me-2"></i> Historique des projets
+        const databaseNavItem = document.createElement('li');
+        databaseNavItem.className = 'nav-item';
+        databaseNavItem.innerHTML = `
+            <a class="nav-link text-white" href="#" onclick="showView('database')">
+                <i class="bi bi-table me-2"></i> Base de données projets
             </a>
         `;
-        // Insert after reports
-        const reportNavItem = document.querySelector('.sidebar .nav-link[onclick="showView(\'report\')"]').parentNode;
-        reportNavItem.parentNode.insertBefore(historyNavItem, reportNavItem.nextSibling);
+        // Insert after projects
+        const projectsNavItem = document.querySelector('.sidebar .nav-link[onclick="showView(\'projects\')"]').parentNode;
+        projectsNavItem.parentNode.insertBefore(databaseNavItem, projectsNavItem.nextSibling);
     }
     
     updateDomotiqueProjectList();
     updateProjectReportList();
-    updateProjectHistoryList();
+    updateProjectsDatabase(); // Initialize the projects database view
 }); 
 
 // Load data from localStorage
@@ -108,7 +108,10 @@ function loadDataFromLocalStorage() {
                         });
                     }
                     
+                    // Mark as initializing to avoid duplicate history entries
+                    location._isInitializing = true;
                     project.addLocation(location);
+                    delete location._isInitializing;
                 });
             }
             
@@ -157,8 +160,8 @@ function showView(viewName) {
         updateProjectReportList();
     } else if (viewName === 'domotique') {
         updateDomotiqueProjectList();
-    } else if (viewName === 'history') {
-        updateProjectHistoryList();
+    } else if (viewName === 'database') {
+        updateProjectsDatabase();
     }
 }
 
@@ -492,7 +495,7 @@ function saveProject() {
     updateCalendarWithProjects(); // Update calendar with project dates
     updateDomotiqueProjectList(); // Update project list in domotique view
     updateProjectReportList(); // Update project list in report view
-    updateProjectHistoryList(); // Update project list in history view
+    updateProjectsDatabase(); // Update project list in database view
     saveDataToLocalStorage(); // Save data after changes
     bootstrap.Modal.getInstance(document.getElementById('projectModal')).hide();
 }
@@ -516,7 +519,7 @@ function deleteProject(projectId) {
         updateCalendarWithProjects(); // Update calendar after deleting project
         updateDomotiqueProjectList(); // Update project list in domotique view
         updateProjectReportList(); // Update project list in report view
-        updateProjectHistoryList(); // Update project list in history view
+        updateProjectsDatabase(); // Update project list in database view
         saveDataToLocalStorage(); // Save data after changes
     }
 }
@@ -1705,7 +1708,7 @@ function saveLocationSetup() {
     // Update other views that might display project data
     updateProjectsList();
     updateDashboard();
-    updateProjectHistoryList(); // Update history view
+    updateProjectsDatabase(); // Update database view
 }
 
 function generateReportFromDomotique() {
@@ -1728,78 +1731,97 @@ function generateReportFromDomotique() {
     generateProjectReport();
 }
 
-// Project History functions
-function updateProjectHistoryList() {
-    const projectSelect = document.getElementById('history-project-select');
-    if (projectSelect) {
-        const currentValue = projectSelect.value;
-        projectSelect.innerHTML = `
-            <option value="">Sélectionner un projet</option>
-            ${projects.map(project => {
-                const client = clients.find(c => c.id === project.clientId);
-                const clientName = client ? client.name : 'Client inconnu';
-                return `
-                    <option value="${project.id}" ${currentValue === project.id ? 'selected' : ''}>
-                        ${project.name} (${clientName})
-                    </option>
-                `;
-            }).join('')}
-        `;
+// Add new function to update the projects database
+function updateProjectsDatabase() {
+    const projectsTable = document.getElementById('projects-database-table');
+    if (!projectsTable) return;
+    
+    let tableContent = `
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Nom du projet</th>
+                    <th>Client</th>
+                    <th>Type</th>
+                    <th>Statut</th>
+                    <th>Date début</th>
+                    <th>Date fin</th>
+                    <th>Emplacements</th>
+                    <th>Équipements</th>
+                    <th>Détails</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    if (projects.length === 0) {
+        tableContent += `<tr><td colspan="10" class="text-center">Aucun projet enregistré</td></tr>`;
+    } else {
+        projects.forEach((project, index) => {
+            const client = clients.find(c => c.id === project.clientId) || { name: 'Client inconnu' };
+            const statusText = getStatusLabel(project.status);
+            const totalLocations = project.locations.length;
+            
+            // Count total devices across all locations
+            let totalDevices = 0;
+            project.locations.forEach(location => {
+                totalDevices += location.devices.length;
+            });
+            
+            // Format dates
+            const startDate = project.startDate ? new Date(project.startDate).toLocaleDateString('fr-FR') : '-';
+            const endDate = project.endDate ? new Date(project.endDate).toLocaleDateString('fr-FR') : '-';
+            
+            tableContent += `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${project.name}</td>
+                    <td>${client.name}</td>
+                    <td>${project.type === 'villa' ? 'Villa' : 'Appartement'}</td>
+                    <td><span class="badge ${getStatusBadgeClass(project.status)}">${statusText}</span></td>
+                    <td>${startDate}</td>
+                    <td>${endDate}</td>
+                    <td>${totalLocations}</td>
+                    <td>${totalDevices}</td>
+                    <td>
+                        <button class="btn btn-sm btn-info" onclick="showProjectDetails('${project.id}')" data-bs-toggle="modal" data-bs-target="#projectDetailsModal">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+    
+    tableContent += `
+            </tbody>
+        </table>
+    `;
+    
+    projectsTable.innerHTML = tableContent;
+}
+
+function getStatusBadgeClass(status) {
+    switch(status) {
+        case 'non_commence': return 'bg-secondary';
+        case 'en_cours': return 'bg-primary';
+        case 'en_attente': return 'bg-warning text-dark';
+        case 'en_retard': return 'bg-danger';
+        case 'termine': return 'bg-success';
+        default: return 'bg-secondary';
     }
 }
 
-function showProjectHistory() {
-    const projectId = document.getElementById('history-project-select').value;
-    const historyContainer = document.getElementById('project-history-container');
-    
-    if (!projectId) {
-        historyContainer.innerHTML = '<div class="alert alert-warning">Veuillez sélectionner un projet</div>';
-        return;
-    }
-    
+function showProjectDetails(projectId) {
     const project = projects.find(p => p.id === projectId);
+    if (!project) return;
     
-    if (!project) {
-        historyContainer.innerHTML = '<div class="alert alert-danger">Projet non trouvé</div>';
-        return;
-    }
+    const client = clients.find(c => c.id === project.clientId) || { name: 'Client inconnu' };
+    const modal = document.getElementById('projectDetailsModal');
+    const modalBody = modal.querySelector('.modal-body');
     
-    const client = clients.find(c => c.id === project.clientId);
-    const clientName = client ? client.name : 'Client inconnu';
-    
-    // Get status info for display
-    let statusClass, statusText;
-    switch(project.status) {
-        case 'non_commence':
-            statusClass = 'bg-secondary';
-            statusText = 'Non commencé';
-            break;
-        case 'en_cours':
-            statusClass = 'bg-primary';
-            statusText = 'En cours';
-            break;
-        case 'en_attente':
-            statusClass = 'bg-warning text-dark';
-            statusText = 'En attente';
-            break;
-        case 'en_retard':
-            statusClass = 'bg-danger';
-            statusText = 'En retard';
-            break;
-        case 'termine':
-            statusClass = 'bg-success';
-            statusText = 'Terminé';
-            break;
-        default:
-            statusClass = 'bg-secondary';
-            statusText = 'Statut inconnu';
-    }
-    
-    // Format dates for display
-    const startDateDisplay = project.startDate ? new Date(project.startDate).toLocaleDateString('fr-FR') : 'Non définie';
-    const endDateDisplay = project.endDate ? new Date(project.endDate).toLocaleDateString('fr-FR') : 'Non définie';
-    
-    // Prepare locations details
+    // Create HTML for locations and devices
     let locationsHtml = '';
     
     if (project.locations.length === 0) {
@@ -1853,7 +1875,7 @@ function showProjectHistory() {
                                              data-bs-parent="#historyLocationAccordion">
                                             <div class="accordion-body">
                                                 <div class="row">
-                                                    ${locations.map(location => renderHistoryLocationCard(location)).join('')}
+                                                    ${locations.map(location => renderProjectDetailsLocationCard(location)).join('')}
                                                 </div>
                                             </div>
                                         </div>
@@ -1873,7 +1895,7 @@ function showProjectHistory() {
                     </div>
                     <div class="card-body">
                         <div class="row">
-                            ${project.locations.map(location => renderHistoryLocationCard(location)).join('')}
+                            ${project.locations.map(location => renderProjectDetailsLocationCard(location)).join('')}
                         </div>
                     </div>
                 </div>
@@ -1882,15 +1904,15 @@ function showProjectHistory() {
     }
     
     // Render the complete history view
-    historyContainer.innerHTML = `
+    modalBody.innerHTML = `
         <div class="card mb-4">
             <div class="card-header">
                 <h4>${project.name}</h4>
                 <div class="mt-2">
-                    <span class="badge ${statusClass}">${statusText}</span>
-                    <span class="ms-2">Client: ${clientName}</span>
-                    <span class="ms-3"><i class="bi bi-calendar-event"></i> Début: ${startDateDisplay}</span>
-                    <span class="ms-3"><i class="bi bi-calendar-check"></i> Fin prévue: ${endDateDisplay}</span>
+                    <span class="badge ${getStatusBadgeClass(project.status)}">${getStatusLabel(project.status)}</span>
+                    <span class="ms-2">Client: ${client.name}</span>
+                    <span class="ms-3"><i class="bi bi-calendar-event"></i> Début: ${project.startDate ? new Date(project.startDate).toLocaleDateString('fr-FR') : 'Non définie'}</span>
+                    <span class="ms-3"><i class="bi bi-calendar-check"></i> Fin prévue: ${project.endDate ? new Date(project.endDate).toLocaleDateString('fr-FR') : 'Non définie'}</span>
                 </div>
             </div>
             <div class="card-body">
@@ -1900,22 +1922,24 @@ function showProjectHistory() {
 
         <div class="mb-4">
             <h4>Détails des emplacements</h4>
-            ${locationsHtml}
+            ${locationsHtml || '<div class="alert alert-info">Aucun emplacement configuré</div>'}
         </div>
     `;
+    
+    // Update modal title
+    modal.querySelector('.modal-title').textContent = `Détails du projet: ${project.name}`;
 }
 
-// Helper function to render a location card for history view
-function renderHistoryLocationCard(location) {
+function renderProjectDetailsLocationCard(location) {
     // Device types translation
     const deviceTypesTranslation = {
         'ON_OFF': 'Éclairage ON/OFF',
-        'DIMMER': 'Éclairage variation DIM',
+        'DIMMER': 'Éclairage DIM',
         'SONORISATION': 'Sonorisation',
-        'CLIMATISATION': 'Climatisation',
+        'CLIMATISATION': 'Clim',
         'CHAUFFAGE': 'Chauffage',
         'CAMERA': 'Caméra',
-        'VOLET': 'Volet roulant',
+        'VOLET': 'Volet',
         'ECRAN': 'Écran',
         'VIDEOPHONIE': 'Vidéophonie',
         'WIFI': 'WiFi'
@@ -1931,14 +1955,14 @@ function renderHistoryLocationCard(location) {
     // Create devices list
     const devicesList = Object.entries(devicesByType).map(([type, devices]) => {
         return devices.map(device => {
-            let deviceDetails = deviceTypesTranslation[type] || type;
+            let deviceText = deviceTypesTranslation[type] || type;
             
-            // Special handling for screens with specifications
+            // Add specifications for special device types
             if (type === 'ECRAN' && device.specifications && device.specifications.screenType) {
-                deviceDetails += ` (${device.specifications.screenType})`;
+                deviceText += ` (${device.specifications.screenType})`;
             }
             
-            return `<li>${deviceDetails}</li>`;
+            return `<li>${deviceText}</li>`;
         }).join('');
     }).join('');
     
