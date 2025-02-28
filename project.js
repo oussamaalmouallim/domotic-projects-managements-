@@ -13,7 +13,10 @@ class Project {
 
     addLocation(location) {
         this.locations.push(location);
-        this.addToHistory('Ajout emplacement: ' + location.name);
+        // Only call addToHistory if this isn't being called during initialization
+        if (typeof location._isInitializing === 'undefined') {
+            this.addToHistory('Ajout emplacement: ' + location.name);
+        }
     }
 
     updateStatus(newStatus) {
@@ -45,6 +48,10 @@ class Project {
     }
 
     addToHistory(action) {
+        if (!this.history) {
+            this.history = [];
+        }
+        
         this.history.push({
             date: new Date(),
             action: action

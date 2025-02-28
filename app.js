@@ -1,7 +1,6 @@
 // Global variables
 let clients = [];
 let projects = [];
-const stockManager = new StockManager();
 let currentDomotiqueProject = null;
 let currentProjectReport = null;
 
@@ -75,9 +74,19 @@ function loadDataFromLocalStorage() {
             
             // Restore project properties
             project.status = projectData.status;
-            project.history = projectData.history;
+            project.history = projectData.history || []; // Ensure history is initialized
             project.startDate = projectData.startDate ? new Date(projectData.startDate) : null;
             project.endDate = projectData.endDate ? new Date(projectData.endDate) : null;
+            
+            // Fix dates in history entries if they exist
+            if (project.history && Array.isArray(project.history)) {
+                project.history = project.history.map(entry => {
+                    return {
+                        date: entry.date ? new Date(entry.date) : new Date(),
+                        action: entry.action || 'Action inconnue'
+                    };
+                });
+            }
             
             // Restore locations and devices
             if (projectData.locations) {
@@ -106,36 +115,6 @@ function loadDataFromLocalStorage() {
             return project;
         });
     }
-    
-    // Load stock data
-    const savedStock = localStorage.getItem('stock');
-    if (savedStock) {
-        const stockData = JSON.parse(savedStock);
-        
-        // Restore inventory
-        if (stockData.inventory) {
-            Object.entries(stockData.inventory).forEach(([itemId, quantity]) => {
-                stockManager.inventory.set(itemId, quantity);
-            });
-        }
-        
-        // Restore minimum stock
-        if (stockData.minStock) {
-            Object.entries(stockData.minStock).forEach(([itemId, minQuantity]) => {
-                stockManager.minStock.set(itemId, minQuantity);
-            });
-        }
-        
-        // Restore history
-        if (stockData.history) {
-            stockManager.history = stockData.history.map(entry => {
-                return {
-                    ...entry,
-                    date: new Date(entry.date)
-                };
-            });
-        }
-    }
 }
 
 // Save data to localStorage
@@ -145,14 +124,6 @@ function saveDataToLocalStorage() {
     
     // Save projects
     localStorage.setItem('projects', JSON.stringify(projects));
-    
-    // Save stock data
-    const stockData = {
-        inventory: Object.fromEntries(stockManager.inventory),
-        minStock: Object.fromEntries(stockManager.minStock),
-        history: stockManager.history
-    };
-    localStorage.setItem('stock', JSON.stringify(stockData));
 }
 
 // Navigation
@@ -641,138 +612,11 @@ function renderProjects(projectsList) {
     }).join('');
 }
 
-// Stock management
-function showStockModal(type, itemId = null) {
-    const modal = new bootstrap.Modal(document.getElementById('stockModal'));
-    document.getElementById('stockForm').reset();
-    
-    if (type === 'edit' && itemId) {
-        document.getElementById('stockItemId').value = itemId;
-        document.getElementById('stockItemId').readOnly = true;
-        document.getElementById('stockQuantity').value = stockManager.getStock(itemId);
-        document.getElementById('stockMinQuantity').value = stockManager.minStock.get(itemId) || 5;
-    } else {
-        document.getElementById('stockItemId').readOnly = false;
-    }
-    
-    modal.show();
-}
-
-function saveStock() {
-    const itemId = document.getElementById('stockItemId').value;
-    const quantity = parseInt(document.getElementById('stockQuantity').value, 10);
-    const minQuantity = parseInt(document.getElementById('stockMinQuantity').value, 10);
-    
-    if (!itemId || isNaN(quantity) || quantity < 0) {
-        alert('Veuillez remplir tous les champs correctement');
-        return;
-    }
-    
-    stockManager.addItem(itemId, quantity, minQuantity);
-    updateStockList();
-    updateDashboard();
-    saveDataToLocalStorage(); // Save data after changes
-    bootstrap.Modal.getInstance(document.getElementById('stockModal')).hide();
-}
-
-function removeStock(itemId) {
-    const quantity = parseInt(prompt(`Quantité à retirer pour ${itemId}:`, "1"), 10);
-    if (!isNaN(quantity) && quantity > 0) {
-        if (stockManager.removeItem(itemId, quantity)) {
-            updateStockList();
-            updateDashboard();
-            saveDataToLocalStorage(); // Save data after changes
-        } else {
-            alert('Stock insuffisant');
-        }
-    }
-}
-
-function updateStockList() {
-    const stocksList = document.getElementById('stocksList');
-    const items = Array.from(stockManager.inventory.keys());
-    
-    if (items.length === 0) {
-        stocksList.innerHTML = '<p class="text-center">Aucun produit en stock</p>';
-        return;
-    }
-    
-    stocksList.innerHTML = `
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Produit</th>
-                    <th>Quantité</th>
-                    <th>Stock Min</th>
-                    <th>Statut</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${items.map(itemId => {
-                    const quantity = stockManager.getStock(itemId);
-                    const minQuantity = stockManager.minStock.get(itemId) || 0;
-                    const status = quantity <= minQuantity ? 
-                        '<span class="badge bg-danger">Faible</span>' : 
-                        '<span class="badge bg-success">OK</span>';
-                    
-                    return `
-                        <tr>
-                            <td>${itemId}</td>
-                            <td>${quantity}</td>
-                            <td>${minQuantity}</td>
-                            <td>${status}</td>
-                            <td>
-                                <button class="btn btn-sm btn-warning me-1" onclick="showStockModal('edit', '${itemId}')">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                <button class="btn btn-sm btn-danger me-1" onclick="removeStock('${itemId}')">
-                                    <i class="bi bi-dash-circle"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('')}
-            </tbody>
-        </table>
-    `;
-    
-    // Update stock history
-    const stockHistory = document.getElementById('stockHistory');
-    const history = stockManager.getHistory().slice(-10).reverse(); // Get last 10 entries
-    
-    if (history.length === 0) {
-        stockHistory.innerHTML = '<p class="text-center">Aucun historique</p>';
-        return;
-    }
-    
-    stockHistory.innerHTML = `
-        <div class="list-group">
-            ${history.map(entry => {
-                const date = new Date(entry.date).toLocaleString();
-                const action = entry.action === 'add' ? 'Ajout' : 'Retrait';
-                const badgeClass = entry.action === 'add' ? 'bg-success' : 'bg-danger';
-                
-                return `
-                    <div class="list-group-item list-group-item-action">
-                        <div class="d-flex justify-content-between">
-                            <span class="badge ${badgeClass}">${action}</span>
-                            <small>${date}</small>
-                        </div>
-                        <p class="mb-1">${entry.itemId}: ${entry.quantity}</p>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-    `;
-}
-
-// Dashboard updates
+// Update dashboard
 function updateDashboard() {
     // Update counts
     document.getElementById('client-count').textContent = clients.length;
     document.getElementById('project-count').textContent = projects.length;
-    document.getElementById('stock-count').textContent = stockManager.inventory.size;
     
     // Update recent projects
     const recentProjects = projects.slice(0, 3);
@@ -827,27 +671,10 @@ function updateDashboard() {
             </div>
         `;
     }
-    
-    // Update low stock
-    const lowStockItems = stockManager.checkLowStock();
-    const lowStockEl = document.getElementById('low-stock');
-    
-    if (lowStockItems.length === 0) {
-        lowStockEl.innerHTML = '<p class="text-muted">Aucun stock à faible niveau</p>';
-    } else {
-        lowStockEl.innerHTML = `
-            <div class="list-group">
-                ${lowStockItems.map(item => `
-                    <div class="list-group-item list-group-item-action">
-                        <div class="d-flex justify-content-between">
-                            <h6>${item.itemId}</h6>
-                            <span class="badge bg-danger">Faible</span>
-                        </div>
-                        <p class="mb-1">Quantité: ${item.quantity} / Min: ${item.minQuantity}</p>
-                    </div>
-                `).join('')}
-            </div>
-        `;
+
+    // Remove low stock section from dashboard
+    if (document.getElementById('low-stock-card')) {
+        document.getElementById('low-stock-card').remove();
     }
 }
 

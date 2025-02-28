@@ -2,7 +2,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TIS PROJECTS MANAGEMENT - Dashboard</title>
+    <title>DomoticPro - Dashboard</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.css" rel="stylesheet">
@@ -13,7 +13,7 @@
         <div class="row">
             <!-- Sidebar Navigation -->
             <div class="col-md-2 sidebar bg-dark text-white py-4 no-print">
-                <h3 class="text-center mb-4">TIS PROJECTS MANAGEMENT</h3>
+                <h3 class="text-center mb-4">DomoticPro</h3>
                 <ul class="nav flex-column">
                     <li class="nav-item">
                         <a class="nav-link text-white active" href="#" onclick="showView('dashboard')">
@@ -64,7 +64,7 @@
                 <div id="dashboard-view" class="view-section">
                     <h1 class="mb-4">Tableau de bord</h1>
                     <div class="row">
-                        <div class="col-md-4 mb-4">
+                        <div class="col-md-6 mb-4">
                             <div class="card dashboard-card">
                                 <div class="card-body">
                                     <h5 class="card-title"><i class="bi bi-people-fill me-2"></i>Clients</h5>
@@ -73,7 +73,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-4 mb-4">
+                        <div class="col-md-6 mb-4">
                             <div class="card dashboard-card">
                                 <div class="card-body">
                                     <h5 class="card-title"><i class="bi bi-hammer me-2"></i>Projets</h5>
@@ -82,19 +82,10 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-4 mb-4">
-                            <div class="card dashboard-card">
-                                <div class="card-body">
-                                    <h5 class="card-title"><i class="bi bi-box-seam me-2"></i>Stocks</h5>
-                                    <p class="card-text display-4" id="stock-count">0</p>
-                                    <a href="#" onclick="showView('stock')" class="btn btn-outline-primary">Gérer les stocks</a>
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6 mb-4">
+                        <div class="col-12 mb-4">
                             <div class="card">
                                 <div class="card-header">
                                     Projets récents
@@ -102,18 +93,6 @@
                                 <div class="card-body">
                                     <div id="recent-projects">
                                         <p class="text-muted">Aucun projet récent</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-4">
-                            <div class="card">
-                                <div class="card-header">
-                                    Stocks à faible niveau
-                                </div>
-                                <div class="card-body">
-                                    <div id="low-stock">
-                                        <p class="text-muted">Aucun stock à faible niveau</p>
                                     </div>
                                 </div>
                             </div>
@@ -208,6 +187,17 @@
                             Sélectionnez un projet et générez un rapport pour voir les détails
                         </div>
                     </div>
+                    <div class="col-md-4 text-end">
+                        <button class="btn btn-outline-primary" onclick="printReport()">
+                            <i class="bi bi-printer"></i> Imprimer
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="exportReportPDF()">
+                            <i class="bi bi-file-earmark-pdf"></i> Exporter PDF
+                        </button>
+                        <button id="exportToGSheetsBtn" class="btn btn-outline-success" onclick="exportReportToGoogleSheets()">
+                            <i class="bi bi-table"></i> Exporter vers Google Sheets
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Project History View -->
@@ -236,34 +226,6 @@
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle me-2"></i>
                             Sélectionnez un projet pour voir son historique des modifications
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Stock View -->
-                <div id="stock-view" class="view-section d-none">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h1>Gestion des Stocks</h1>
-                        <button class="btn btn-primary" onclick="showStockModal('new')">
-                            <i class="bi bi-plus-circle me-2"></i>Ajouter un Produit
-                        </button>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-8">
-                            <div class="card">
-                                <div class="card-header">Inventaire</div>
-                                <div class="card-body">
-                                    <div id="stocksList" class="table-responsive"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card">
-                                <div class="card-header">Historique des mouvements</div>
-                                <div class="card-body">
-                                    <div id="stockHistory"></div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -340,29 +302,29 @@
                 <div class="modal-body">
                     <form id="clientForm">
                         <input type="hidden" id="clientId">
-                        <div class="mb-3">
-                            <label class="form-label">Nom</label>
-                            <input type="text" class="form-control" id="clientName" required>
+                        <div class="form-floating mb-3 modal-form-group">
+                            <input type="text" class="form-control" id="clientName" placeholder="Nom" required>
+                            <label for="clientName">Nom</label>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Email</label>
-                            <input type="email" class="form-control" id="clientEmail" required>
+                        <div class="form-floating mb-3 modal-form-group">
+                            <input type="email" class="form-control" id="clientEmail" placeholder="Email" required>
+                            <label for="clientEmail">Email</label>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Téléphone</label>
-                            <input type="tel" class="form-control" id="clientPhone">
+                        <div class="form-floating mb-3 modal-form-group">
+                            <input type="tel" class="form-control" id="clientPhone" placeholder="Téléphone">
+                            <label for="clientPhone">Téléphone</label>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Adresse</label>
-                            <textarea class="form-control" id="clientAddress" rows="2"></textarea>
+                        <div class="form-floating mb-3 modal-form-group">
+                            <textarea class="form-control" id="clientAddress" rows="2" placeholder="Adresse" style="height: 100px"></textarea>
+                            <label for="clientAddress">Adresse</label>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Priorité</label>
-                            <select class="form-select" id="clientPriority">
+                        <div class="form-floating mb-3 modal-form-group">
+                            <select class="form-select" id="clientPriority" aria-label="Priorité">
                                 <option value="normal">Normal</option>
                                 <option value="moyenne">Moyenne</option>
                                 <option value="haute">Haute</option>
                             </select>
+                            <label for="clientPriority">Priorité</label>
                         </div>
                     </form>
                 </div>
@@ -384,25 +346,24 @@
                 <div class="modal-body">
                     <form id="projectForm">
                         <input type="hidden" id="projectId">
-                        <div class="mb-3">
-                            <label class="form-label">Nom du projet</label>
-                            <input type="text" class="form-control" id="projectName" required>
+                        <div class="form-floating mb-3 modal-form-group">
+                            <input type="text" class="form-control" id="projectName" placeholder="Nom du projet" required>
+                            <label for="projectName">Nom du projet</label>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Client</label>
+                        <div class="form-floating mb-3 modal-form-group">
                             <select class="form-select" id="projectClient" required>
                                 <option value="">Sélectionner un client</option>
                             </select>
+                            <label for="projectClient">Client</label>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Type de projet</label>
+                        <div class="form-floating mb-3 modal-form-group">
                             <select class="form-select" id="projectType">
                                 <option value="appartement">Appartement</option>
                                 <option value="villa">Villa</option>
                             </select>
+                            <label for="projectType">Type de projet</label>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Statut</label>
+                        <div class="form-floating mb-3 modal-form-group">
                             <select class="form-select" id="projectStatus">
                                 <option value="non_commence">Non commencé</option>
                                 <option value="en_cours">En cours</option>
@@ -410,14 +371,15 @@
                                 <option value="en_retard">En retard</option>
                                 <option value="termine">Terminé</option>
                             </select>
+                            <label for="projectStatus">Statut</label>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Date de début</label>
-                            <input type="date" class="form-control" id="projectStartDate">
+                        <div class="form-floating mb-3 modal-form-group">
+                            <input type="date" class="form-control" id="projectStartDate" placeholder="Date de début">
+                            <label for="projectStartDate">Date de début</label>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Date de fin prévue</label>
-                            <input type="date" class="form-control" id="projectEndDate">
+                        <div class="form-floating mb-3 modal-form-group">
+                            <input type="date" class="form-control" id="projectEndDate" placeholder="Date de fin prévue">
+                            <label for="projectEndDate">Date de fin prévue</label>
                         </div>
                     </form>
                 </div>
@@ -429,41 +391,11 @@
         </div>
     </div>
 
-    <div class="modal fade" id="stockModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Gestion Stock</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="stockForm">
-                        <div class="mb-3">
-                            <label class="form-label">Produit</label>
-                            <input type="text" class="form-control" id="stockItemId" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Quantité</label>
-                            <input type="number" class="form-control" id="stockQuantity" required min="1">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Stock minimum</label>
-                            <input type="number" class="form-control" id="stockMinQuantity" value="5">
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-                    <button type="button" class="btn btn-primary" onclick="saveStock()">Enregistrer</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
     <script src="stock.js"></script>
     <script src="project.js"></script>
     <script src="app.js"></script>
+    <script src="google-sheets-export.js"></script>
 </body>
 </html>
