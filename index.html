@@ -396,9 +396,379 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js"></script>
     <script src="stock.js"></script>
     <script src="project.js"></script>
     <script src="app.js"></script>
     <script src="google-sheets-export.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js"></script>
+    <script>
+        // Configuration Supabase
+const supabaseUrl = "https://quflgxjymdocfcqwppxl.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1ZmxneGp5bWRvY2ZjcXdwcHhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA4MjI5NzAsImV4cCI6MjA1NjM5ODk3MH0.084B-my88YIXT0TZ2uD0UT82xU2M4yRhBv2idNUSjLQ";
+const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+// Charger la liste des clients
+async function loadClients() {
+    try {
+        const { data: clients, error } = await supabase
+            .from('clients')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const clientsListContainer = document.getElementById('clientsList');
+        
+        const table = document.createElement('table');
+        table.className = 'table table-striped table-hover';
+        
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th>Nom</th>
+                    <th>Email</th>
+                    <th>Téléphone</th>
+                    <th>Priorité</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="clientsTableBody"></tbody>
+        `;
+
+        const tbody = table.querySelector('tbody');
+
+        clients.forEach(client => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${client.name}</td>
+                <td>${client.email}</td>
+                <td>${client.phone || 'N/A'}</td>
+                <td>${client.priority}</td>
+                <td>
+                    <button class="btn btn-sm btn-primary me-2" onclick="editClient('${client.id}')">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteClient('${client.id}')">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        document.getElementById('client-count').textContent = clients.length;
+
+        clientsListContainer.innerHTML = '';
+        clientsListContainer.appendChild(table);
+    } catch (error) {
+        console.error('Erreur lors du chargement des clients :', error);
+        alert('Erreur lors du chargement des clients.');
+    }
+}
+
+// Enregistrer un client
+async function saveClient() {
+    const clientId = document.getElementById('clientId').value;
+    
+    const clientData = {
+        name: document.getElementById('clientName').value,
+        email: document.getElementById('clientEmail').value,
+        phone: document.getElementById('clientPhone').value,
+        address: document.getElementById('clientAddress').value,
+        priority: document.getElementById('clientPriority').value
+    };
+
+    try {
+        let response;
+        if (clientId) {
+            response = await supabase
+                .from('clients')
+                .update(clientData)
+                .eq('id', clientId);
+        } else {
+            response = await supabase
+                .from('clients')
+                .insert([clientData]);
+        }
+
+        if (response.error) throw response.error;
+
+        const clientModal = bootstrap.Modal.getInstance(document.getElementById('clientModal'));
+        clientModal.hide();
+
+        loadClients();
+        loadClientsDropdown(); // Mettre à jour la liste déroulante des clients
+        
+        alert('Client enregistré avec succès !');
+    } catch (error) {
+        console.error('Erreur lors de l\'enregistrement du client :', error);
+        alert('Erreur lors de l\'enregistrement du client.');
+    }
+}
+
+// Éditer un client
+async function editClient(clientId) {
+    try {
+        const { data: client, error } = await supabase
+            .from('clients')
+            .select('*')
+            .eq('id', clientId)
+            .single();
+
+        if (error) throw error;
+
+        document.getElementById('clientId').value = client.id;
+        document.getElementById('clientName').value = client.name;
+        document.getElementById('clientEmail').value = client.email;
+        document.getElementById('clientPhone').value = client.phone || '';
+        document.getElementById('clientAddress').value = client.address || '';
+        document.getElementById('clientPriority').value = client.priority;
+
+        const clientModal = new bootstrap.Modal(document.getElementById('clientModal'));
+        clientModal.show();
+    } catch (error) {
+        console.error('Erreur lors de la récupération du client :', error);
+        alert('Erreur lors de la récupération du client.');
+    }
+}
+
+// Supprimer un client
+async function deleteClient(clientId) {
+    if (!confirm('Voulez-vous vraiment supprimer ce client ? Cette action est irréversible.')) {
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('clients')
+            .delete()
+            .eq('id', clientId);
+
+        if (error) throw error;
+
+        loadClients();
+        loadClientsDropdown(); // Mettre à jour la liste déroulante des clients
+        
+        alert('Client supprimé avec succès !');
+    } catch (error) {
+        console.error('Erreur lors de la suppression du client :', error);
+        alert('Erreur lors de la suppression du client.');
+    }
+}
+
+// Charger la liste déroulante des clients
+async function loadClientsDropdown() {
+    const clientSelect = document.getElementById('projectClient');
+    
+    try {
+        const { data: clients, error } = await supabase
+            .from('clients')
+            .select('id, name');
+
+        if (error) throw error;
+
+        clientSelect.innerHTML = '<option value="">Sélectionner un client</option>';
+        clients.forEach(client => {
+            const option = document.createElement('option');
+            option.value = client.id;
+            option.textContent = client.name;
+            clientSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Erreur lors du chargement des clients :', error);
+    }
+}
+
+// Charger la liste des projets
+async function loadProjects() {
+    try {
+        const { data: projects, error } = await supabase
+            .from('projects')
+            .select('*, clients(name)')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Réinitialiser les conteneurs de projets par statut
+        const projectContainers = {
+            'non_commence': document.getElementById('projetsNonCommences'),
+            'en_cours': document.getElementById('projetsCours'),
+            'en_attente': document.getElementById('projetsAttente'),
+            'en_retard': document.getElementById('projetsRetard'),
+            'termine': document.getElementById('projetsTermines')
+        };
+
+        // Réinitialiser les conteneurs
+        Object.values(projectContainers).forEach(container => {
+            container.innerHTML = '';
+        });
+
+        // Mettre à jour le compteur de projets
+        document.getElementById('project-count').textContent = projects.length;
+
+        // Afficher les projets par statut
+        projects.forEach(project => {
+            const projectCard = document.createElement('div');
+            projectCard.className = 'col-md-4 mb-3';
+            projectCard.innerHTML = `
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">${project.name}</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">${project.clients.name}</h6>
+                        <p class="card-text">
+                            Type: ${project.type}<br>
+                            Début: ${project.start_date || 'Non défini'}<br>
+                            Fin prévue: ${project.end_date || 'Non définie'}
+                        </p>
+                        <div class="d-flex justify-content-between">
+                            <button class="btn btn-sm btn-primary" onclick="editProject('${project.id}')">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteProject('${project.id}')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Ajouter le projet au conteneur correspondant à son statut
+            projectContainers[project.status].appendChild(projectCard);
+        });
+    } catch (error) {
+        console.error('Erreur lors du chargement des projets :', error);
+        alert('Erreur lors du chargement des projets.');
+    }
+}
+
+// Enregistrer un projet
+async function saveProject() {
+    const projectId = document.getElementById('projectId').value;
+    
+    const projectData = {
+        name: document.getElementById('projectName').value,
+        client_id: document.getElementById('projectClient').value,
+        type: document.getElementById('projectType').value,
+        status: document.getElementById('projectStatus').value,
+        start_date: document.getElementById('projectStartDate').value,
+        end_date: document.getElementById('projectEndDate').value
+    };
+
+    try {
+        let response;
+        if (projectId) {
+            response = await supabase
+                .from('projects')
+                .update(projectData)
+                .eq('id', projectId);
+        } else {
+            response = await supabase
+                .from('projects')
+                .insert([projectData]);
+        }
+
+        if (response.error) throw response.error;
+
+        const projectModal = bootstrap.Modal.getInstance(document.getElementById('projectModal'));
+        projectModal.hide();
+
+        loadProjects();
+        
+        alert('Projet enregistré avec succès !');
+    } catch (error) {
+        console.error('Erreur lors de l\'enregistrement du projet :', error);
+        alert('Erreur lors de l\'enregistrement du projet.');
+    }
+}
+
+// Éditer un projet
+async function editProject(projectId) {
+    try {
+        const { data: project, error } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('id', projectId)
+            .single();
+
+        if (error) throw error;
+
+        document.getElementById('projectId').value = project.id;
+        document.getElementById('projectName').value = project.name;
+        document.getElementById('projectClient').value = project.client_id;
+        document.getElementById('projectType').value = project.type;
+        document.getElementById('projectStatus').value = project.status;
+        document.getElementById('projectStartDate').value = project.start_date || '';
+        document.getElementById('projectEndDate').value = project.end_date || '';
+
+        const projectModal = new bootstrap.Modal(document.getElementById('projectModal'));
+        projectModal.show();
+    } catch (error) {
+        console.error('Erreur lors de la récupération du projet :', error);
+        alert('Erreur lors de la récupération du projet.');
+    }
+}
+
+// Supprimer un projet
+async function deleteProject(projectId) {
+    if (!confirm('Voulez-vous vraiment supprimer ce projet ? Cette action est irréversible.')) {
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('projects')
+            .delete()
+            .eq('id', projectId);
+
+        if (error) throw error;
+
+        loadProjects();
+        
+        alert('Projet supprimé avec succès !');
+    } catch (error) {
+        console.error('Erreur lors de la suppression du projet :', error);
+        alert('Erreur lors de la suppression du projet.');
+    }
+}
+
+// Réinitialiser le formulaire lors de l'ouverture du modal pour un nouveau client
+function showClientModal(type) {
+    if (type === 'new') {
+        document.getElementById('clientId').value = '';
+        document.getElementById('clientName').value = '';
+        document.getElementById('clientEmail').value = '';
+        document.getElementById('clientPhone').value = '';
+        document.getElementById('clientAddress').value = '';
+        document.getElementById('clientPriority').value = 'normal';
+    }
+
+    const clientModal = new bootstrap.Modal(document.getElementById('clientModal'));
+    clientModal.show();
+}
+
+// Réinitialiser le formulaire lors de l'ouverture du modal pour un nouveau projet
+function showProjectModal(type) {
+    if (type === 'new') {
+        document.getElementById('projectId').value = '';
+        document.getElementById('projectName').value = '';
+        document.getElementById('projectClient').value = '';
+        document.getElementById('projectType').value = 'appartement';
+        document.getElementById('projectStatus').value = 'non_commence';
+        document.getElementById('projectStartDate').value = '';
+        document.getElementById('projectEndDate').value = '';
+    }
+
+    const projectModal = new bootstrap.Modal(document.getElementById('projectModal'));
+    projectModal.show();
+}
+
+// Charger les données au chargement de la page
+document.addEventListener('DOMContentLoaded', () => {
+    loadClients();
+    loadClientsDropdown();
+    loadProjects();
+});
+    </script>
 </body>
 </html>
